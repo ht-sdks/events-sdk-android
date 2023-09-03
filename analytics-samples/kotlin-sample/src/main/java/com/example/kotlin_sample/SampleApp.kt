@@ -25,11 +25,11 @@ package com.example.kotlin_sample
 
 import android.app.Application
 import android.util.Log
-import com.segment.analytics.Analytics
-import com.segment.analytics.Middleware
-import com.segment.analytics.ValueMap
-import com.segment.analytics.integrations.BasePayload
-import com.segment.analytics.integrations.TrackPayload
+import com.hightouch.analytics.Analytics
+import com.hightouch.analytics.Middleware
+import com.hightouch.analytics.ValueMap
+import com.hightouch.analytics.integrations.BasePayload
+import com.hightouch.analytics.integrations.TrackPayload
 import io.github.inflationx.calligraphy3.CalligraphyConfig
 import io.github.inflationx.calligraphy3.CalligraphyInterceptor
 import io.github.inflationx.viewpump.ViewPump

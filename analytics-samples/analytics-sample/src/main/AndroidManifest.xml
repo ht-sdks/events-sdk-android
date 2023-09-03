@@ -24,7 +24,7 @@
   -->
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.segment.analytics.sample">
+    package="com.hightouch.analytics.sample">
 
   <!-- Required for internet. -->
   <uses-permission android:name="android.permission.INTERNET"/>
@@ -43,10 +43,10 @@
       android:icon="@mipmap/ic_launcher"
       android:label="@string/app_name"
       android:theme="@style/AppTheme"
-      android:name=".SampleApp">
+      android:name="com.hightouch.analytics.sample.SampleApp">
 
     <activity
-        android:name=".MainActivity"
+        android:name="com.hightouch.analytics.sample.MainActivity"
         android:label="@string/app_name"
         android:windowSoftInputMode="stateHidden"
         android:exported="true">
@@ -58,7 +58,7 @@
     </activity>
 
     <service
-        android:name="com.segment.analytics.PhoneAnalyticsListenerService"
+        android:name="com.hightouch.analytics.PhoneAnalyticsListenerService"
         android:exported="true">
       <intent-filter>
         <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />

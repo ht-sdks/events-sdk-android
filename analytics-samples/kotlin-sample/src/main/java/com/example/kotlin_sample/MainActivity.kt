@@ -34,8 +34,8 @@ import android.view.MenuItem
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.kotlin_sample.databinding.ActivityMainBinding
-import com.segment.analytics.Analytics
-import com.segment.analytics.Traits
+import com.hightouch.analytics.Analytics
+import com.hightouch.analytics.Traits
 import kotlinx.android.synthetic.main.activity_main.alias_text
 import kotlinx.android.synthetic.main.activity_main.group_id
 import kotlinx.android.synthetic.main.activity_main.identify_age
@@ -73,7 +73,7 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.reset -> {
-                Analytics.with(this).reset()
+                com.hightouch.analytics.Analytics.with(this).reset()
                 true
             }
             else -> super.onOptionsItemSelected(item)
@@ -81,12 +81,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onAButtonClick() {
-        Analytics.with(this).track("Button A clicked")
+        com.hightouch.analytics.Analytics.with(this).track("Button A clicked")
         Toast.makeText(this, "Button A clicked", Toast.LENGTH_SHORT).show()
     }
 
     private fun onBButtonClick() {
-        Analytics.with(this).track("Button B clicked")
+        com.hightouch.analytics.Analytics.with(this).track("Button B clicked")
         Toast.makeText(this, "Button B clicked", Toast.LENGTH_SHORT).show()
     }
 
@@ -99,9 +99,12 @@ class MainActivity : AppCompatActivity() {
         if (allFieldsEmpty) {
             Toast.makeText(this, "At least one field must be filled in", Toast.LENGTH_SHORT).show()
         } else {
-            if (!isNullOrEmpty(name)) { Analytics.with(this).identify(Traits().putName(name)) }
-            if (!isNullOrEmpty(email)) { Analytics.with(this).identify(Traits().putEmail(email)) }
-            if (!isNullOrEmpty(age)) { Analytics.with(this).identify(Traits().putAge(age.toInt())) }
+            if (!isNullOrEmpty(name)) { com.hightouch.analytics.Analytics.with(this).identify(
+                com.hightouch.analytics.Traits().putName(name)) }
+            if (!isNullOrEmpty(email)) { com.hightouch.analytics.Analytics.with(this).identify(
+                com.hightouch.analytics.Traits().putEmail(email)) }
+            if (!isNullOrEmpty(age)) { com.hightouch.analytics.Analytics.with(this).identify(
+                com.hightouch.analytics.Traits().putAge(age.toInt())) }
 
             Toast.makeText(this, "Identification acknowledged", Toast.LENGTH_SHORT).show()
         }
@@ -113,7 +116,7 @@ class MainActivity : AppCompatActivity() {
         if (isNullOrEmpty(groupId)) {
             Toast.makeText(this, "Cannot have an empty group id", Toast.LENGTH_SHORT).show()
         } else {
-            Analytics.with(this).group(groupId)
+            com.hightouch.analytics.Analytics.with(this).group(groupId)
             Toast.makeText(this, "Group acknowledged", Toast.LENGTH_SHORT).show()
         }
     }
@@ -130,14 +133,14 @@ class MainActivity : AppCompatActivity() {
         if (isNullOrEmpty(aliasCopy)) {
             Toast.makeText(this, "Cannot have an empty alias", Toast.LENGTH_SHORT).show()
         } else {
-            Analytics.with(this).alias(aliasCopy)
-            Analytics.with(this).identify(aliasCopy)
+            com.hightouch.analytics.Analytics.with(this).alias(aliasCopy)
+            com.hightouch.analytics.Analytics.with(this).identify(aliasCopy)
             Toast.makeText(this, "Alias acknowledged", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun onFlushClick() {
-        Analytics.with(this).flush()
+        com.hightouch.analytics.Analytics.with(this).flush()
         Toast.makeText(this, "Events flushed", Toast.LENGTH_SHORT).show()
     }
 
