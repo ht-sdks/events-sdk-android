@@ -47,10 +47,14 @@ public class ConnectionFactory {
 
     /**
      * Return a {@link HttpURLConnection} that writes batched payloads to {@code
-     * https://api.segment.io/v1/import}.
+     * https://api.segment.io/v1/batch}.
      */
     public HttpURLConnection upload(String apiHost) throws IOException {
-        HttpURLConnection connection = openConnection(String.format("https://%s/import", apiHost));
+        String url = String.format("https://%s/batch", apiHost);
+        if (apiHost.startsWith("localhost")) {
+            url = String.format("http://%s/batch", apiHost);
+        }
+        HttpURLConnection connection = openConnection(url);
         connection.setRequestProperty("Content-Encoding", "gzip");
         connection.setDoOutput(true);
         connection.setChunkedStreamingMode(0);

@@ -99,7 +99,7 @@ class ClientTest {
         assertThat(connection.`is`).isNull()
         assertThat(connection.connection.responseCode).isEqualTo(200) // consume the response
         RecordedRequestAssert.assertThat(server.takeRequest())
-            .hasRequestLine("POST /v1/import HTTP/1.1")
+            .hasRequestLine("POST /v1/batch HTTP/1.1")
             .containsHeader("User-Agent", ConnectionFactory.USER_AGENT)
             .containsHeader("Content-Type", "application/json")
             .containsHeader("Content-Encoding", "gzip")
