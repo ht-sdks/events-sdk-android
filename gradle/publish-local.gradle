@@ -10,9 +10,8 @@ project.afterEvaluate {
         def groupId = GROUP
         def artifactId = POM_ARTIFACT_ID
         def versionName = VERSION_NAME
-//        def versionName = VERSION_NAME + "-local"
-//        def debugSuffix = "-debug"
-        def releaseSuffix = "-release"
+        def debugSuffix = "-debug"
+        def releaseSuffix = "" // "-release"
 
         publishing {
             publications {
@@ -21,7 +20,7 @@ project.afterEvaluate {
                     artifact(sourceJar)
                     setGroupId groupId
                     setArtifactId artifactId
-                    version versionName + releaseSuffix
+                    version versionName
                 }
 
 //                LibraryDebug(MavenPublication) {
