@@ -47,7 +47,7 @@ public class ConnectionFactory {
 
     /**
      * Return a {@link HttpURLConnection} that writes batched payloads to {@code
-     * https://api.segment.io/v1/batch}.
+     * https://events.us-east-1.hightouch.com/v1/batch}.
      */
     public HttpURLConnection upload(String apiHost) throws IOException {
         String url = String.format("https://%s/batch", apiHost);

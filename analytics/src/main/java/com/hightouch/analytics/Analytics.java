@@ -1422,7 +1422,7 @@ public class Analytics {
 
         /**
          * Set the apiHost name for the region to which Segment sends events to. Defaults to
-         * "api.segment.io/v1"
+         * "events.us-east-1.hightouch.com/v1"
          */
         public Builder defaultApiHost(String apiHost) {
             this.defaultApiHost = apiHost;
