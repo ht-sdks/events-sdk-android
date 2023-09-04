@@ -273,7 +273,7 @@ public class AnalyticsContext extends ValueMap {
     /** Fill this instance with library information. */
     void putLibrary() {
         Map<String, Object> library = Utils.createMap();
-        library.put(LIBRARY_NAME_KEY, "analytics-android");
+        library.put(LIBRARY_NAME_KEY, "events-sdk-android");
         library.put(LIBRARY_VERSION_KEY, BuildConfig.VERSION_NAME);
         put(LIBRARY_KEY, library);
     }

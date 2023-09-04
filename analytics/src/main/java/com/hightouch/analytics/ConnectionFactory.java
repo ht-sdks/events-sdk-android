@@ -51,7 +51,7 @@ public class ConnectionFactory {
      */
     public HttpURLConnection upload(String apiHost) throws IOException {
         String url = String.format("https://%s/batch", apiHost);
-        if (apiHost.startsWith("localhost")) {
+        if (apiHost.startsWith("localhost") || apiHost.startsWith("10.")) {
             url = String.format("http://%s/batch", apiHost);
         }
         HttpURLConnection connection = openConnection(url);
