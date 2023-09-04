@@ -60,4 +60,4 @@ ext.deps = [
   supportAnnotations: 'androidx.annotation:annotation:1.1.0'
 ]
 
-apply from: rootProject.file('gradle/promote.gradle')
+//apply from: rootProject.file('gradle/promote.gradle')

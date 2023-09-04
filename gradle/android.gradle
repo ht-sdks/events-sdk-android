@@ -1,5 +1,9 @@
 
 android {
+    buildFeatures {
+        buildConfig = true
+    }
+
     compileSdkVersion rootProject.ext.compileSdkVersion
 
     defaultConfig {
