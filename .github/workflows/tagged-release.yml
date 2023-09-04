@@ -7,7 +7,7 @@ on:
     branches: ["main"]
     # Pattern matched against refs/tags
     tags:
-      - "**" # Push events to every tag including hierarchical tags like v1.0/beta
+      - "v[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
   id-token: write # allows the JWT to be requested from GitHub's OIDC provider
@@ -23,6 +23,7 @@ jobs:
 
       - name: Get new version number
         run: |
+          echo "SEMVER=$GITHUB_REF_NAME" >> $GITHUB_ENV
           echo "DATE=$(date)" >> $GITHUB_ENV
 
       - name: Send message to Slack channel
@@ -51,7 +52,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*Release: <${{ env.PACKAGE_URL }}|${{ env.GITHUB_REF_NAME }}>*\n${{ env.DATE }}"
+                    "text": "*Release: <${{ env.PACKAGE_URL }}|${{ env.SEMVER }}>*\n${{ env.DATE }}"
                   }
                 }
               ]
