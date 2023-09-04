@@ -39,10 +39,11 @@ public class ConnectionFactory {
     private static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = 15 * 1000; // 15s
     static final String USER_AGENT = "analytics-android/" + BuildConfig.VERSION_NAME;
 
+    // TODO pass defaultApiHost through fetchSettings() to projectSettings()
     /** Return a {@link HttpURLConnection} that reads JSON formatted project settings. */
     public HttpURLConnection projectSettings(String writeKey) throws IOException {
         return openConnection(
-                "https://cdn-settings.segment.com/v1/projects/" + writeKey + "/settings");
+                "https://events.us-east-1.hightouch.com/v1/projects/" + writeKey + "/settings");
     }
 
     /**

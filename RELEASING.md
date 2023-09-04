@@ -1,28 +1,45 @@
-Releasing
-=========
+# Releasing
 
- 1. Create a new branch called `release/X.Y.Z`
- 2. `git checkout -b release/X.Y.Z`
- 3. Change the version in `gradle.properties` to your desired release version
- 4. Update the `CHANGELOG.md` for the impending release.
- 5. `git commit -am "Create release X.Y.Z."` (where X.Y.Z is the new version)
- 6. `git tag -a X.Y.Z -m "Version X.Y.Z"` (where X.Y.Z is the new version)
- 7. Upgrade to next version by changing version in `gradle.properties`
- 8. `git commit -am "Prepare snapshot X.Y.Z-SNAPSHOT"`
- 9. `git push && git push --tags`
- 10. Create a PR to merge the new branch into `master`
- 11. The CI pipeline will recognize the tag and upload, close and promote the artifacts automatically
+## JitPack Release
 
-Example (stable release)
-========
- 1. Current VERSION_NAME in `gradle.properties` = 4.9.1
- 2. `git checkout -b release/4.9.2`
- 3. Change VERSION_NAME = 4.9.2 (next higher version)
- 4. Update CHANGELOG.md
- 5. `git commit -am "Create release 4.9.2"`
- 6. `git tag -a 4.9.2 -m "Version 4.9.2"`
- 6. `git push && git push --tags`
- 7. Change VERSION_NAME = 4.9.3 (next higher version)
- 8. `git commit -am "Prepare snapshot 4.9.3-SNAPSHOT"`
- 9. `git push && git push --tags`
- 10. Merging PR master will create a snapshot release 4.9.3-SNAPSHOT and tag push will create stable release 4.9.2
+1. Increment version name and version code in gradle.properties
+1. Merge to `main`
+1. Tag commit on `main` using the version name (e.g. semantic versioning X.Y.Z)
+1. Push tags to github
+1. Visit https://jitpack.io/#ht-sdks/events-sdk-android/ and refresh until the `Version` tab shows your new tag. Click `Get it`. Click the spinner next to `Get it` and wait for the request to return the build.log. Ensure that the build succeeded and created new assets with your desired tags.
+
+## Local Release Testing
+
+1. Increment version name and version code in gradle.properties
+1. In android studio, run the gradle for `publishToMavenLocal`
+1. This should create a `com.hightouch` package at `~./m2/repositories`
+1. Change your test android app's gradle dependencies in `build.gradle` (not this repository's) from
+
+```gradle
+dependencies {
+  implementation("com.github.ht-sdks.events-sdk-android:analytics:X.Y.Z")
+}
+```
+
+to point at your local package (swap out the X.Y.Z for your version)
+
+```gradle
+dependencies {
+  implementation("com.hightouch.analytics.android:analytics:X.Y.Z")
+}
+```
+
+You'll also need to then set up local maven dependencies.
+
+```
+  allprojects {
+    repositories {
+      ...
+      mavenLocal()
+    }
+  }
+```
+
+## Snapshot
+
+In addition to git's tagged versions, you can point JitPack at specifc commits or branches.
