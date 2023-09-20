@@ -43,12 +43,12 @@ public class ConnectionFactory {
     /** Return a {@link HttpURLConnection} that reads JSON formatted project settings. */
     public HttpURLConnection projectSettings(String writeKey) throws IOException {
         return openConnection(
-                "https://events.us-east-1.hightouch.com/v1/projects/" + writeKey + "/settings");
+                "https://us-east-1.hightouch-events.com/v1/projects/" + writeKey + "/settings");
     }
 
     /**
      * Return a {@link HttpURLConnection} that writes batched payloads to {@code
-     * https://events.us-east-1.hightouch.com/v1/batch}.
+     * https://us-east-1.hightouch-events.com/v1/batch}.
      */
     public HttpURLConnection upload(String apiHost) throws IOException {
         String url = String.format("https://%s/batch", apiHost);
