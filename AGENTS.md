@@ -1,43 +1,14 @@
 # Agent Instructions
 
-This file provides instructions for AI agents working on this Android SDK repository.
+This file provides guidance for AI agents updating dependencies in this Android SDK repository.
 
 ## Project Overview
 
 - **Language**: Java / Kotlin
-- **Platform**: Android (minSdk 14, targetSdk 32, compileSdk 32)
 - **Build System**: Gradle 7.3.3 with Gradle Wrapper
 - **JDK**: 11 (required)
-- **Kotlin Version**: 1.4.0
 - **Testing**: JUnit 4 + Robolectric
-- **Publishing**: JitPack
-
-### Project Structure
-
-```
-analytics/                        # Core analytics library (published)
-analytics-tests/                  # Integration/instrumentation tests
-analytics-wear/                   # Android Wear support (published)
-analytics-samples/
-  analytics-sample/               # Sample app (Java)
-  analytics-wear-sample/          # Sample Wear app
-  kotlin-sample/                  # Sample app (Kotlin)
-gradle/
-  android.gradle                  # Shared Android config
-  versioning.gradle               # Version name/code logic
-  publish-local.gradle            # Local Maven publishing
-  mvn-publish.gradle              # Maven Central publishing
-  attach-jar.gradle               # JAR attachment config
-  promote.gradle                  # Promotion config
-```
-
-### Module Dependencies
-
-```
-analytics-tests ──► analytics
-analytics-wear ──► analytics
-analytics-samples/* ──► analytics
-```
+- **CI command**: `./gradlew check build assembleAndroidTest`
 
 ---
 
@@ -140,10 +111,6 @@ For major version bumps (e.g., Kotlin 1.x to 2.x, AGP major update):
 ./gradlew check build assembleAndroidTest
 ```
 
-#### Option C: Using Gradle Version Catalog (future)
-
-This project does not yet use a Gradle Version Catalog (`libs.versions.toml`). If migrating to one, centralize all versions there and reference them in `build.gradle` files.
-
 ### 6. Rebuild and Test
 
 ```bash
@@ -169,120 +136,18 @@ Ensure this exact command passes locally before pushing. The `check` task runs l
 
 ---
 
-## Module-Specific Notes
+## Troubleshooting Dependency Updates
 
-### Core Analytics (`analytics/`)
-
-The main library module. This is the primary published artifact. Update this first when doing cross-module dependency upgrades.
-
-```bash
-./gradlew :analytics:check :analytics:build
-```
-
-Key files:
-- `analytics/build.gradle` - dependencies and build config
-- `analytics/src/main/` - source code (Java + Kotlin)
-- `analytics/src/test/` - unit tests (Robolectric)
-
-### Analytics Tests (`analytics-tests/`)
-
-Integration tests module that depends on `analytics`.
-
-```bash
-./gradlew :analytics-tests:check :analytics-tests:build
-```
-
-### Analytics Wear (`analytics-wear/`)
-
-Android Wear support module. Depends on `analytics` and Google Play Services Wearable.
-
-```bash
-./gradlew :analytics-wear:check :analytics-wear:build
-```
-
-### Sample Apps (`analytics-samples/`)
-
-Sample applications demonstrating SDK usage. Not published but useful for manual verification.
-
-```bash
-./gradlew :analytics-samples:analytics-sample:assembleDebug
-./gradlew :analytics-samples:kotlin-sample:assembleDebug
-```
-
----
-
-## Version Bumping
-
-### Semantic Versioning
-
-- **PATCH** (0.0.7 → 0.0.8): Bug fixes, dependency updates, no new features
-- **MINOR** (0.0.7 → 0.1.0): New backwards-compatible features
-- **MAJOR** (0.0.7 → 1.0.0): Breaking API changes
-
-Dependency updates are typically **PATCH** bumps.
-
-### Files to Update
-
-1. `gradle.properties` → `VERSION_NAME` and `VERSION_CODE`
-2. The `BuildConfig.VERSION_NAME` field is auto-generated from `gradle.properties` during build
-
-See `RELEASING.md` for the full release process via JitPack.
-
----
-
-## CI/CD
-
-- **CI config**: `.github/workflows/android.yml`
-- **Runs on**: Ubuntu (latest) with JDK 11 (Temurin distribution)
-- **Steps**: `chmod +x gradlew`, `./gradlew check build assembleAndroidTest`
-- **Triggers**: Push to `main`, pull requests targeting `main`
-
-### CI Failures After Dependency Updates
+### CI Failures After Upgrades
 
 1. **Compilation errors**: Check for API changes in updated libraries (e.g., removed or renamed methods)
 2. **Test failures**: Review changelogs of updated dependencies for behavior changes
 3. **Lint errors**: The `check` task includes Android Lint. New lint rules may flag existing code after AGP updates
 4. **Robolectric issues**: Robolectric version must be compatible with the target SDK version. Check the [Robolectric compatibility matrix](http://robolectric.org/getting-started/)
 
----
-
-## Common Issues
-
-### Gradle Wrapper Permissions
-
-If `./gradlew` fails with a permission error:
-
-```bash
-chmod +x gradlew
-```
-
-### JDK Version Mismatch
-
-This project requires JDK 11. If you see errors about unsupported class file versions or missing APIs:
-
-```bash
-# Check current JDK
-java -version
-
-# Set JAVA_HOME if needed
-export JAVA_HOME=/path/to/jdk-11
-```
-
-### AndroidX / Jetifier
-
-The project uses AndroidX with Jetifier enabled (`android.enableJetifier=true` in `gradle.properties`). If adding new dependencies, ensure they are AndroidX-compatible or can be jetified.
-
-### Robolectric Download Issues
-
-Robolectric downloads Android SDK jars on first run. If behind a proxy or firewall, you may see download failures. The repo URL is configured in `gradle/android.gradle`:
-
-```groovy
-systemProperty 'robolectric.dependency.repo.url', 'https://repo1.maven.org/maven2'
-```
-
 ### Kotlin Version Compatibility
 
-The project uses Kotlin 1.4.0. When upgrading Kotlin:
+When upgrading Kotlin:
 
 1. Update `ext.kotlin_version` in root `build.gradle`
 2. Ensure the Kotlin stdlib version matches across all modules
@@ -291,21 +156,3 @@ The project uses Kotlin 1.4.0. When upgrading Kotlin:
 ### Android Gradle Plugin (AGP) Upgrades
 
 AGP version must be compatible with the Gradle wrapper version. See the [AGP/Gradle compatibility matrix](https://developer.android.com/build/releases/gradle-plugin#updating-gradle). Current: AGP 7.2.2 requires Gradle 7.3.3+.
-
----
-
-## Quick Reference
-
-| Task | Command |
-|------|---------|
-| Full CI build | `./gradlew check build assembleAndroidTest` |
-| Clean build | `./gradlew clean build` |
-| Run unit tests only | `./gradlew test` |
-| Run lint checks | `./gradlew lint` |
-| Build core library | `./gradlew :analytics:build` |
-| Build wear library | `./gradlew :analytics-wear:build` |
-| List dependencies | `./gradlew :analytics:dependencies` |
-| Publish to local Maven | `./gradlew publishToMavenLocal` |
-| Assemble debug samples | `./gradlew :analytics-samples:analytics-sample:assembleDebug` |
-| Check Gradle version | `./gradlew --version` |
-| Update Gradle wrapper | `./gradlew wrapper --gradle-version=<VERSION>` |
