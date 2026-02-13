@@ -61,19 +61,12 @@ Review dependency versions against known CVE databases (e.g., [OSV](https://osv.
 ./gradlew :analytics-tests:dependencies --configuration releaseRuntimeClasspath
 ```
 
-Compare each dependency version against its latest release on Maven Central or Google's Maven Repository. Key dependencies to watch:
+Compare each dependency version against its latest release on Maven Central or Google's Maven Repository. Dependency versions are defined in these locations:
 
-| Dependency | Current | Where Defined |
-|---|---|---|
-| `com.android.tools.build:gradle` | 7.2.2 | `build.gradle` (root) |
-| `org.jetbrains.kotlin:kotlin-gradle-plugin` | 1.4.0 | `build.gradle` (root) |
-| `androidx.annotation:annotation` | 1.1.0 | `build.gradle` (root `ext.deps`) |
-| `androidx.lifecycle:lifecycle-process` | 2.2.0 | `analytics/build.gradle` |
-| `androidx.lifecycle:lifecycle-common-java8` | 2.2.0 | `analytics/build.gradle` |
-| `androidx.core:core-ktx` | 1.3.1 | `analytics/build.gradle` |
-| `org.robolectric:robolectric` | 4.7.3 | `analytics/build.gradle` (test) |
-| `junit:junit` | 4.13.2 | `analytics/build.gradle` (test) |
-| `com.google.android.gms:play-services-wearable` | 10.2.6 | `analytics-wear/build.gradle` |
+- **Root `build.gradle`**: Android Gradle Plugin, Kotlin plugin version (`ext.kotlin_version`), shared dependency versions (`ext.deps`)
+- **`analytics/build.gradle`**: AndroidX libraries, test dependencies (Robolectric, JUnit, Mockito, etc.)
+- **`analytics-wear/build.gradle`**: Play Services Wearable
+- **`gradle/wrapper/gradle-wrapper.properties`**: Gradle wrapper version
 
 ### 5. Upgrade Dependencies
 
