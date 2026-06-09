@@ -1,5 +1,6 @@
 package com.hightouch.analytics
 
+import com.hightouch.analytics.internal.Utils.getSegmentSharedPreferences
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.Before
 import org.junit.Test
@@ -40,22 +41,29 @@ class SessionStateCacheTest {
             )
 
         cache.set(state)
+        assertThat(
+            getSegmentSharedPreferences(RuntimeEnvironment.application, "session-state-cache-test")
+                .edit()
+                .commit()
+        ).isTrue()
         val freshCache =
             SessionState.Cache(
                 RuntimeEnvironment.application,
                 Cartographer.INSTANCE,
                 "session-state-cache-test"
             )
-        val cachedState = freshCache.get()
+        val cachedState = requireNotNull(freshCache.get()) { "Expected cached session state." }
 
         assertThat(cachedState.sessionId()).isEqualTo(1000L)
         assertThat(cachedState.sessionIndex()).isEqualTo(0)
-        assertThat(cachedState.previousSessionId()).isNull()
+        val previousSessionId: Long? = cachedState.previousSessionId()
+        assertThat(previousSessionId).isNull()
         assertThat(cachedState.firstEventId()).isEqualTo("message-id")
         assertThat(cachedState.firstEventTimestamp()).isEqualTo("2026-01-01T00:00:01.000Z")
         assertThat(cachedState.eventIndex()).isEqualTo(1)
         assertThat(cachedState.lastActivityAt()).isEqualTo(1000L)
-        assertThat(cachedState.backgroundedAt()).isNull()
+        val backgroundedAt: Long? = cachedState.backgroundedAt()
+        assertThat(backgroundedAt).isNull()
     }
 
     @Test
