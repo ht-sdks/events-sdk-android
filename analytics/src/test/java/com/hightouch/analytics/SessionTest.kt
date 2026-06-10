@@ -168,6 +168,29 @@ class SessionTest {
     }
 
     @Test
+    fun uploadsTrackedEventsWithSessionContext() {
+        val events = mutableListOf<TrackPayload>()
+        val analytics = makeAnalytics("session-delivery", events)
+
+        analytics.track("Purchase Completed")
+        analytics.flush()
+
+        val context = events[0].context()
+        val session = context.getValueMap("session")
+        assertEntries(context, "sessionId" to 1000L, "sessionStart" to true)
+        assertEntries(
+            session,
+            "sessionId" to 1000L,
+            "sessionIndex" to 0,
+            "sessionStart" to true,
+            "eventIndex" to 0,
+            "previousSessionId" to null,
+            "firstEventId" to events[0].messageId(),
+            "firstEventTimestamp" to events[0].getString("timestamp")
+        )
+    }
+
+    @Test
     fun preservesBackgroundTimestampWhenEventsAreProcessedWhileBackgrounded() {
         val events = mutableListOf<TrackPayload>()
         val analytics = makeAnalytics("session-background-event", events)
