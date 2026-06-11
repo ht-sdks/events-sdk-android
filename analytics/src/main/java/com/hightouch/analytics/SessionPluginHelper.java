@@ -104,7 +104,8 @@ class SessionPluginHelper {
             return null;
         }
 
-        return state.copy().putBackgroundedAt(now);
+        Long backgroundedAt = state.backgroundedAt() != null ? state.backgroundedAt() : now;
+        return state.copy().putBackgroundedAt(backgroundedAt);
     }
 
     static SessionState markForegrounded(

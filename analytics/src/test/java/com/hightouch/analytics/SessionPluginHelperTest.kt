@@ -150,6 +150,41 @@ class SessionPluginHelperTest {
     }
 
     @Test
+    fun preservesBackgroundedAtWhenRebackgroundingWithPendingRotation() {
+        val backgroundedState = initialState.copy().putBackgroundedAt(1500)
+        val foregroundedState =
+            SessionPluginHelper.markForegrounded(backgroundedState, 4000, 2000)
+
+        assertThat(foregroundedState.backgroundedAt()).isEqualTo(1500)
+
+        val rebackgroundedState = SessionPluginHelper.markBackgrounded(foregroundedState, 5100)
+
+        assertThat(rebackgroundedState.backgroundedAt()).isEqualTo(1500)
+
+        val result =
+            SessionPluginHelper.processEvent(
+                rebackgroundedState,
+                5200,
+                "delayed-rotation-message-id",
+                "2026-01-01T00:00:05.200Z",
+                1_800_000,
+                2000,
+                false
+            )
+
+        assertEntries(
+            result.contextSession,
+            "sessionId" to 5200L,
+            "sessionIndex" to 1,
+            "sessionStart" to true,
+            "eventIndex" to 0,
+            "previousSessionId" to 1000L,
+            "firstEventId" to "delayed-rotation-message-id",
+            "firstEventTimestamp" to "2026-01-01T00:00:05.200Z"
+        )
+    }
+
+    @Test
     fun coldStartRotatesWhenPersistedBackgroundedAtExceeded() {
         val backgroundedState = initialState.copy().putBackgroundedAt(1500)
         val result =
