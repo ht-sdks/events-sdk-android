@@ -47,6 +47,7 @@ class AnalyticsActivityLifecycleCallbacks
     private Boolean trackDeepLinks;
     private Boolean shouldRecordScreenViews;
     private PackageInfo packageInfo;
+    private SessionPlugin sessionPlugin;
 
     private AtomicBoolean trackedApplicationLifecycleEvents;
     private AtomicInteger numberOfActivities;
@@ -92,7 +93,8 @@ class AnalyticsActivityLifecycleCallbacks
             Boolean trackDeepLinks,
             Boolean shouldRecordScreenViews,
             PackageInfo packageInfo,
-            Boolean useNewLifecycleMethods) {
+            Boolean useNewLifecycleMethods,
+            SessionPlugin sessionPlugin) {
         this.trackedApplicationLifecycleEvents = new AtomicBoolean(false);
         this.numberOfActivities = new AtomicInteger(1);
         this.firstLaunch = new AtomicBoolean(false);
@@ -103,15 +105,20 @@ class AnalyticsActivityLifecycleCallbacks
         this.shouldRecordScreenViews = shouldRecordScreenViews;
         this.packageInfo = packageInfo;
         this.useNewLifecycleMethods = useNewLifecycleMethods;
+        this.sessionPlugin = sessionPlugin;
         this.isChangingActivityConfigurations = new AtomicBoolean(false);
     }
 
     @Override
     public void onStop(@NonNull LifecycleOwner owner) {
         // App in background
-        if (shouldTrackApplicationLifecycleEvents
-                && numberOfActivities.decrementAndGet() == 0
-                && !isChangingActivityConfigurations.get()) {
+        if (numberOfActivities.decrementAndGet() == 0 && !isChangingActivityConfigurations.get()) {
+            if (sessionPlugin != null) {
+                sessionPlugin.markBackgrounded();
+            }
+            if (!shouldTrackApplicationLifecycleEvents) {
+                return;
+            }
             analytics.track("Application Backgrounded");
         }
     }
@@ -119,9 +126,13 @@ class AnalyticsActivityLifecycleCallbacks
     @Override
     public void onStart(@NonNull LifecycleOwner owner) {
         // App in foreground
-        if (shouldTrackApplicationLifecycleEvents
-                && numberOfActivities.incrementAndGet() == 1
-                && !isChangingActivityConfigurations.get()) {
+        if (numberOfActivities.incrementAndGet() == 1 && !isChangingActivityConfigurations.get()) {
+            if (sessionPlugin != null) {
+                sessionPlugin.markForegrounded();
+            }
+            if (!shouldTrackApplicationLifecycleEvents) {
+                return;
+            }
             Properties properties = new Properties();
             if (firstLaunch.get()) {
                 properties
@@ -136,11 +147,12 @@ class AnalyticsActivityLifecycleCallbacks
     @Override
     public void onCreate(@NonNull LifecycleOwner owner) {
         // App created
-        if (!trackedApplicationLifecycleEvents.getAndSet(true)
-                && shouldTrackApplicationLifecycleEvents) {
+        if (!trackedApplicationLifecycleEvents.getAndSet(true)) {
             numberOfActivities.set(0);
             firstLaunch.set(true);
-            analytics.trackApplicationLifecycleEvents();
+            if (shouldTrackApplicationLifecycleEvents) {
+                analytics.trackApplicationLifecycleEvents();
+            }
         }
     }
 
@@ -251,6 +263,7 @@ class AnalyticsActivityLifecycleCallbacks
         private Boolean shouldRecordScreenViews;
         private PackageInfo packageInfo;
         private Boolean useNewLifecycleMethods;
+        private SessionPlugin sessionPlugin;
 
         public Builder() {}
 
@@ -290,6 +303,11 @@ class AnalyticsActivityLifecycleCallbacks
             return this;
         }
 
+        Builder sessionPlugin(SessionPlugin sessionPlugin) {
+            this.sessionPlugin = sessionPlugin;
+            return this;
+        }
+
         public AnalyticsActivityLifecycleCallbacks build() {
             return new AnalyticsActivityLifecycleCallbacks(
                     analytics,
@@ -298,7 +316,8 @@ class AnalyticsActivityLifecycleCallbacks
                     trackDeepLinks,
                     shouldRecordScreenViews,
                     packageInfo,
-                    useNewLifecycleMethods);
+                    useNewLifecycleMethods,
+                    sessionPlugin);
         }
     }
 }

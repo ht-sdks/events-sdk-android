@@ -218,6 +218,43 @@ class AnalyticsBuilderTest {
     }
 
     @Test
+    fun sessionTimeoutsDefaultToThirtyMinutes() {
+        val builder = Builder(context, "foo")
+
+        assertThat(builder.getLongField("foregroundSessionTimeout")).isEqualTo(1_800_000L)
+        assertThat(builder.getLongField("backgroundSessionTimeout")).isEqualTo(1_800_000L)
+    }
+
+    @Test
+    fun sessionTimeoutsCanBeConfigured() {
+        val builder = Builder(context, "foo")
+
+        assertThat(builder.foregroundSessionTimeout(1234)).isSameAs(builder)
+        assertThat(builder.backgroundSessionTimeout(5678)).isSameAs(builder)
+        assertThat(builder.getLongField("foregroundSessionTimeout")).isEqualTo(1234L)
+        assertThat(builder.getLongField("backgroundSessionTimeout")).isEqualTo(5678L)
+    }
+
+    @Test
+    fun invalidSessionTimeoutsThrowException() {
+        try {
+            Builder(context, "foo").foregroundSessionTimeout(-1)
+            fail("Negative foreground session timeout should throw exception.")
+        } catch (expected: IllegalArgumentException) {
+            assertThat(expected)
+                .hasMessage("foregroundSessionTimeout must be greater than or equal to zero.")
+        }
+
+        try {
+            Builder(context, "foo").backgroundSessionTimeout(-1)
+            fail("Negative background session timeout should throw exception.")
+        } catch (expected: IllegalArgumentException) {
+            assertThat(expected)
+                .hasMessage("backgroundSessionTimeout must be greater than or equal to zero.")
+        }
+    }
+
+    @Test
     @Throws(Exception::class)
     fun invalidOptionsThrowsException() {
         try {
@@ -280,5 +317,11 @@ class AnalyticsBuilderTest {
         } catch (expected: NullPointerException) {
             assertThat(expected).hasMessage("defaultProjectSettings == null")
         }
+    }
+
+    private fun Builder.getLongField(name: String): Long {
+        val field = Builder::class.java.getDeclaredField(name)
+        field.isAccessible = true
+        return field.getLong(this)
     }
 }

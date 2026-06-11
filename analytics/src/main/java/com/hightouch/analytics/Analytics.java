@@ -130,6 +130,7 @@ public class Analytics {
     private static final String VERSION_KEY = "version";
     private static final String BUILD_KEY = "build";
     private static final String TRAITS_KEY = "traits";
+    @Private static final long DEFAULT_SESSION_TIMEOUT = 1_800_000L;
 
     private final Application application;
     final ExecutorService networkExecutor;
@@ -157,6 +158,7 @@ public class Analytics {
     private final CountDownLatch advertisingIdLatch;
     private final ExecutorService analyticsExecutor;
     private final BooleanPreference optOut;
+    @Nullable private final SessionPlugin sessionPlugin;
 
     final Map<String, Boolean> bundledIntegrations = new ConcurrentHashMap<>();
     private List<Integration.Factory> factories;
@@ -254,6 +256,7 @@ public class Analytics {
             @NonNull Lifecycle lifecycle,
             boolean nanosecondTimestamps,
             boolean useNewLifecycleMethods,
+            @Nullable SessionPlugin sessionPlugin,
             String defaultApiHost) {
         this.application = application;
         this.networkExecutor = networkExecutor;
@@ -280,6 +283,7 @@ public class Analytics {
         this.lifecycle = lifecycle;
         this.nanosecondTimestamps = nanosecondTimestamps;
         this.useNewLifecycleMethods = useNewLifecycleMethods;
+        this.sessionPlugin = sessionPlugin;
 
         namespaceSharedPreferences();
 
@@ -361,6 +365,7 @@ public class Analytics {
                         .shouldRecordScreenViews(shouldRecordScreenViews)
                         .packageInfo(getPackageInfo(application))
                         .useNewLifecycleMethods(useNewLifecycleMethods)
+                        .sessionPlugin(sessionPlugin)
                         .build();
 
         application.registerActivityLifecycleCallbacks(activityLifecycleCallback);
@@ -789,6 +794,9 @@ public class Analytics {
         if (optOut.get()) {
             return;
         }
+        if (sessionPlugin != null) {
+            payload = sessionPlugin.enrich(payload);
+        }
         logger.verbose("Created payload %s.", payload);
         Middleware.Chain chain =
                 new MiddlewareChainRunner(
@@ -917,6 +925,9 @@ public class Analytics {
         traitsCache.delete();
         traitsCache.set(Traits.create());
         analyticsContext.setTraits(traitsCache.get());
+        if (sessionPlugin != null) {
+            sessionPlugin.reset();
+        }
         runOnMainThread(IntegrationOperation.RESET);
     }
 
@@ -1113,6 +1124,9 @@ public class Analytics {
         private ValueMap defaultProjectSettings = new ValueMap();
         private boolean useNewLifecycleMethods = true; // opt-out feature
         private String defaultApiHost = Utils.DEFAULT_API_HOST;
+        private long foregroundSessionTimeout = DEFAULT_SESSION_TIMEOUT;
+        private long backgroundSessionTimeout = DEFAULT_SESSION_TIMEOUT;
+        private SessionPlugin.Clock sessionClock;
 
         /**
          * Start building a new {@link Analytics} instance.
@@ -1312,6 +1326,26 @@ public class Analytics {
             return this;
         }
 
+        /** Set the foreground inactivity timeout before a new session starts, in milliseconds. */
+        public Builder foregroundSessionTimeout(long timeoutMs) {
+            if (timeoutMs < 0) {
+                throw new IllegalArgumentException(
+                        "foregroundSessionTimeout must be greater than or equal to zero.");
+            }
+            this.foregroundSessionTimeout = timeoutMs;
+            return this;
+        }
+
+        /** Set the background duration timeout before a new session starts, in milliseconds. */
+        public Builder backgroundSessionTimeout(long timeoutMs) {
+            if (timeoutMs < 0) {
+                throw new IllegalArgumentException(
+                        "backgroundSessionTimeout must be greater than or equal to zero.");
+            }
+            this.backgroundSessionTimeout = timeoutMs;
+            return this;
+        }
+
         /**
          * @see #useSourceMiddleware(Middleware)
          * @deprecated Use {@link #useSourceMiddleware(Middleware)} instead.
@@ -1438,6 +1472,11 @@ public class Analytics {
             return this;
         }
 
+        Builder sessionClock(SessionPlugin.Clock sessionClock) {
+            this.sessionClock = Utils.assertNotNull(sessionClock, "sessionClock");
+            return this;
+        }
+
         /** Create a {@link Analytics} client. */
         public Analytics build() {
             if (Utils.isNullOrEmpty(tag)) {
@@ -1476,6 +1515,19 @@ public class Analytics {
 
             ProjectSettings.Cache projectSettingsCache =
                     new ProjectSettings.Cache(application, cartographer, tag);
+            SessionPlugin sessionPlugin = null;
+            if (SessionPluginHelper.isEnabled(foregroundSessionTimeout, backgroundSessionTimeout)) {
+                sessionPlugin =
+                        new SessionPlugin(
+                                application,
+                                cartographer,
+                                tag,
+                                foregroundSessionTimeout,
+                                backgroundSessionTimeout,
+                                sessionClock == null
+                                        ? new SessionPlugin.SystemClock()
+                                        : sessionClock);
+            }
 
             BooleanPreference optOut =
                     new BooleanPreference(
@@ -1553,6 +1605,7 @@ public class Analytics {
                     lifecycle,
                     nanosecondTimestamps,
                     useNewLifecycleMethods,
+                    sessionPlugin,
                     defaultApiHost);
         }
     }
