@@ -28,6 +28,22 @@ class SessionPluginHelper {
         return now - state.lastActivityAt() > foregroundSessionTimeout;
     }
 
+    static boolean shouldRotateSession(
+            SessionState state,
+            long now,
+            long foregroundSessionTimeout,
+            long backgroundSessionTimeout,
+            boolean isAppInBackground) {
+        if (state == null) {
+            return true;
+        }
+        if (isAppInBackground) {
+            return false;
+        }
+        return shouldRotateOnResume(state, now, backgroundSessionTimeout)
+                || shouldRotateOnInactivity(state, now, foregroundSessionTimeout);
+    }
+
     static SessionState rotateSession(
             SessionState state, long now, String firstEventId, String firstEventTimestamp) {
         return new SessionState(
@@ -85,11 +101,12 @@ class SessionPluginHelper {
             long backgroundSessionTimeout,
             boolean isAppInBackground) {
         boolean shouldRotate =
-                state == null
-                        || (!isAppInBackground
-                                && (shouldRotateOnResume(state, now, backgroundSessionTimeout)
-                                        || shouldRotateOnInactivity(
-                                                state, now, foregroundSessionTimeout)));
+                shouldRotateSession(
+                        state,
+                        now,
+                        foregroundSessionTimeout,
+                        backgroundSessionTimeout,
+                        isAppInBackground);
 
         SessionState currentState =
                 shouldRotate
