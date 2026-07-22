@@ -53,7 +53,7 @@ public class SampleApp extends Application {
                                 new CalligraphyInterceptor(
                                         new CalligraphyConfig.Builder()
                                                 .setDefaultFontPath("fonts/CircularStd-Book.otf")
-                                                .setFontAttrId(R.attr.fontPath)
+                                                .setFontAttrId(io.github.inflationx.calligraphy3.R.attr.fontPath)
                                                 .build()))
                         .build());
 

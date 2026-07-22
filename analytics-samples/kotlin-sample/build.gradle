@@ -1,14 +1,15 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
-apply plugin: 'kotlin-android-extensions'
 
 android {
-	compileSdkVersion 32
+	namespace 'com.example.kotlin_sample'
+
+	compileSdkVersion rootProject.ext.compileSdkVersion
 
 	defaultConfig {
 		applicationId "com.example.kotlin_sample"
 		minSdkVersion 29
-		targetSdkVersion 32
+		targetSdkVersion rootProject.ext.targetSdkVersion
 		versionCode 1
 		versionName "1.0"
 
@@ -33,6 +34,10 @@ android {
 
 	buildFeatures {
 		viewBinding true
+	}
+
+	kotlinOptions {
+		jvmTarget = "1.8"
 	}
 }
 

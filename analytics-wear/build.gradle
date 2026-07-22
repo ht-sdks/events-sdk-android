@@ -2,6 +2,10 @@ apply plugin: 'com.android.library'
 
 apply from: rootProject.file('gradle/android.gradle')
 
+android {
+	namespace 'com.hightouch.analytics.wear'
+}
+
 dependencies {
 	api project(':analytics')
 
@@ -10,7 +14,6 @@ dependencies {
 	api 'com.google.android.gms:play-services-wearable:10.2.6'
 }
 
-apply from: rootProject.file('gradle/publish-local.gradle')
 repositories {
 	mavenCentral()
 }

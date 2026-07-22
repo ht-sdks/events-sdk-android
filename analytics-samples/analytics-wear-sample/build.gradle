@@ -3,6 +3,8 @@ apply plugin: 'com.android.application'
 apply from: rootProject.file('gradle/android.gradle')
 
 android {
+	namespace 'com.hightouch.analytics.sample'
+
 	defaultConfig {
 		minSdkVersion rootProject.ext.minSdkVersionWear
 	}

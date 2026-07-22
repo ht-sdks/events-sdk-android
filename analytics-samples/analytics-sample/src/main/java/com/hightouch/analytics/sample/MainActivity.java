@@ -34,16 +34,12 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.EditText;
 import android.widget.Toast;
-import butterknife.BindView;
-import butterknife.ButterKnife;
-import butterknife.OnClick;
 import com.hightouch.analytics.Analytics;
 import com.hightouch.analytics.sample.R;
 
 import io.github.inflationx.viewpump.ViewPumpContextWrapper;
 
 public class MainActivity extends Activity {
-    @BindView(R.id.user_id)
     EditText userId;
 
     /** Returns true if the string is null, or empty (when trimmed). */
@@ -56,20 +52,15 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         setContentView(R.layout.activity_main);
-        ButterKnife.bind(this);
+        userId = findViewById(R.id.user_id);
+        findViewById(R.id.action_track_a)
+                .setOnClickListener(v -> Analytics.with(this).track("Button A Clicked"));
+        findViewById(R.id.action_track_b)
+                .setOnClickListener(v -> Analytics.with(this).track("Button B Clicked"));
+        findViewById(R.id.action_identify).setOnClickListener(v -> onIdentifyButtonClicked());
+        findViewById(R.id.action_flush).setOnClickListener(v -> Analytics.with(this).flush());
     }
 
-    @OnClick(R.id.action_track_a)
-    void onButtonAClicked() {
-        Analytics.with(this).track("Button A Clicked");
-    }
-
-    @OnClick(R.id.action_track_b)
-    void onButtonBClicked() {
-        Analytics.with(this).track("Button B Clicked");
-    }
-
-    @OnClick(R.id.action_identify)
     void onIdentifyButtonClicked() {
         String id = userId.getText().toString();
         if (isNullOrEmpty(id)) {
@@ -77,11 +68,6 @@ public class MainActivity extends Activity {
         } else {
             Analytics.with(this).identify(id);
         }
-    }
-
-    @OnClick(R.id.action_flush)
-    void onFlushButtonClicked() {
-        Analytics.with(this).flush();
     }
 
     @Override
