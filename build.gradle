@@ -1,7 +1,7 @@
 apply from: rootProject.file('gradle/versioning.gradle')
 
 buildscript {
-    ext.kotlin_version = '1.4.0'
+    ext.kotlin_version = '1.9.25'
   repositories {
   mavenCentral()
   google()
@@ -11,9 +11,9 @@ buildscript {
 }
 
   dependencies {
-    classpath 'com.android.tools.build:gradle:7.2.2'
+    classpath 'com.android.tools.build:gradle:8.7.3'
     classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-    classpath "io.codearte.gradle.nexus:gradle-nexus-staging-plugin:0.22.0"
+    classpath 'com.vanniktech:gradle-maven-publish-plugin:0.35.0'
   }
 }
 
@@ -38,8 +38,6 @@ allprojects {
   version = getVersionName()
 }
 
-def isCI = "true".equals(System.getenv("CIRCLECI"))
-def preDexEnabled = "true".equals(System.getProperty("preDex", "true"))
 
 ext {
   versionCode = Integer.parseInt(VERSION_CODE)
@@ -47,13 +45,11 @@ ext {
 
   minSdkVersion = 14
   minSdkVersionWear = 23
-  targetSdkVersion = 32
-  compileSdkVersion = 32
+  targetSdkVersion = 34
+  compileSdkVersion = 34
 
   sourceCompatibilityVersion = JavaVersion.VERSION_1_8
   targetCompatibilityVersion = JavaVersion.VERSION_1_8
-
-  preDexLibraries = preDexEnabled && !isCI
 }
 
 ext.deps = [

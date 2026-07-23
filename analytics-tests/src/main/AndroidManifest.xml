@@ -23,7 +23,6 @@
   ~ SOFTWARE.
   -->
 
-<manifest
-    package="com.hightouch.analytics.core.tests">
+<manifest>
   <application/>
 </manifest>

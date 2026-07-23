@@ -36,11 +36,6 @@ import androidx.appcompat.app.AppCompatActivity
 import com.example.kotlin_sample.databinding.ActivityMainBinding
 import com.hightouch.analytics.Analytics
 import com.hightouch.analytics.Traits
-import kotlinx.android.synthetic.main.activity_main.alias_text
-import kotlinx.android.synthetic.main.activity_main.group_id
-import kotlinx.android.synthetic.main.activity_main.identify_age
-import kotlinx.android.synthetic.main.activity_main.identify_email
-import kotlinx.android.synthetic.main.activity_main.identify_name
 
 class MainActivity : AppCompatActivity() {
 
@@ -91,9 +86,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onIdentifyClick() {
-        val name = identify_name.text.toString()
-        val email = identify_email.text.toString()
-        val age = identify_age.text.toString()
+        val name = binding.identifyName.text.toString()
+        val email = binding.identifyEmail.text.toString()
+        val age = binding.identifyAge.text.toString()
         val allFieldsEmpty = isNullOrEmpty(name) && isNullOrEmpty(email) && isNullOrEmpty(age)
 
         if (allFieldsEmpty) {
@@ -111,7 +106,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onGroupClick() {
-        val groupId = group_id.text.toString()
+        val groupId = binding.groupId.text.toString()
 
         if (isNullOrEmpty(groupId)) {
             Toast.makeText(this, "Cannot have an empty group id", Toast.LENGTH_SHORT).show()
@@ -128,7 +123,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onAliasClick() {
-        val aliasCopy = alias_text.text.toString()
+        val aliasCopy = binding.aliasText.text.toString()
 
         if (isNullOrEmpty(aliasCopy)) {
             Toast.makeText(this, "Cannot have an empty alias", Toast.LENGTH_SHORT).show()

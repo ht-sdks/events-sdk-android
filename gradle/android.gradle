@@ -9,16 +9,10 @@ android {
     defaultConfig {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode rootProject.ext.versionCode
-        versionName rootProject.ext.versionName
     }
 
-    dexOptions {
-        preDexLibraries rootProject.ext.preDexLibraries
-    }
-
-    packagingOptions {
-        exclude 'LICENSE.txt'
+    packaging {
+        resources.excludes.add('LICENSE.txt')
     }
 
     buildTypes {
@@ -32,10 +26,9 @@ android {
         targetCompatibility rootProject.ext.targetCompatibilityVersion
     }
 
-    lintOptions {
-        textReport true
-        textOutput 'stdout'
-        disable 'InvalidPackage', 'GradleCompatible'
+    lint {
+        textReport = true
+        disable += ['InvalidPackage', 'GradleCompatible']
     }
 
     testOptions {
