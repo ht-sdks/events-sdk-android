@@ -6,15 +6,50 @@ on:
   push:
     # Pattern matched against refs/tags
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
-  id-token: write # allows the JWT to be requested from GitHub's OIDC provider
   contents: read # This is required for actions/checkout
 
 jobs:
+  verify-tag:
+    name: Verify tag matches VERSION_NAME
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag matches VERSION_NAME
+        run: |
+          VERSION=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)
+          test "$GITHUB_REF_NAME" = "$VERSION" || {
+            echo "Tag $GITHUB_REF_NAME does not match VERSION_NAME=$VERSION"
+            exit 1
+          }
+  publish:
+    name: Publish to Maven Central
+    needs: verify-tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+      - name: Publish
+        run: ./gradlew publishAndReleaseToMavenCentral --no-configuration-cache
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signAllPublications: "true"
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.GPG_SIGNING_KEY_PASSWORD }}
   deploy-release:
     name: Message slack about latest release
+    # Skip the entire Slack message job for now. Up until this point, the tag
+    # push regex above required a "v" prefix on the tag name, but all releases
+    # shipped so far have not had that prefix. So it's unclear if this has ever
+    # run, and it may or may not work at all.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source branch
@@ -26,6 +61,7 @@ jobs:
           echo "DATE=$(date)" >> $GITHUB_ENV
 
       - name: Send message to Slack channel
+
         id: slack
         uses: slackapi/slack-github-action@v1.23.0
         env:

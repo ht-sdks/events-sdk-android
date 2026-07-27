@@ -2,28 +2,17 @@
 
 ## Installing the SDK
 
-This SDK is available through [**JitPack**](https://jitpack.io/#ht-sdks/events-sdk-android/).
-
-1. Add JitPack to your build
+This SDK is published to [Maven Central](https://central.sonatype.com/artifact/com.hightouch.analytics.android/analytics).
 
 ```gradle
-  allprojects {
-    repositories {
-      ...
-      maven { url 'https://jitpack.io' }
-    }
-  }
+dependencies {
+  implementation 'com.hightouch.analytics.android:analytics:X.Y.Z'
+}
 ```
 
-2. Add your dependendcy
+Replace `X.Y.Z` with the desired version. No extra repository block is needed if your project already includes `mavenCentral()`.
 
-```gradle
-  dependencies {
-    implementation 'com.github.ht-sdks.events-sdk-android:analytics:0.0.5'
-  }
-```
-
-See the project's [JitPack page](https://jitpack.io/#ht-sdks/events-sdk-android/) for available build tags. Be sure to update the semver numbers after `:analytics:` (e.g.`:analytics:$.$.$`) to your desired build.
+The SDK is also available through [JitPack](https://jitpack.io/#ht-sdks/events-sdk-android/) using `com.github.ht-sdks.events-sdk-android:analytics:X.Y.Z`. Prefer the Maven Central coordinates above for new integrations; JitPack builds from tags remain available for existing consumers.
 
 ## Initialization
 
