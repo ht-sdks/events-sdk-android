@@ -9,7 +9,6 @@ on:
       - "[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
-  id-token: write # allows the JWT to be requested from GitHub's OIDC provider
   contents: read # This is required for actions/checkout
 
 jobs:
@@ -36,7 +35,6 @@ jobs:
         with:
           java-version: "17"
           distribution: "temurin"
-          cache: gradle
       - name: Publish
         run: ./gradlew publishAndReleaseToMavenCentral --no-configuration-cache
         env:
