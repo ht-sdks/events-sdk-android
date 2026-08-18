@@ -16,4 +16,6 @@
     <string name="alias">Alias</string>
     <string name="alias_id">New ID</string>
     <string name="menu_reset_id">Reset ID</string>
+    <string name="consent_analytics">Analytics consent (C0002)</string>
+    <string name="consent_advertising">Advertising consent (C0004)</string>
 </resources>

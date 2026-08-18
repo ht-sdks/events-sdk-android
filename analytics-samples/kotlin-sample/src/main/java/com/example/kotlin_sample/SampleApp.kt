@@ -26,15 +26,24 @@ package com.example.kotlin_sample
 import android.app.Application
 import android.util.Log
 import com.hightouch.analytics.Analytics
+import com.hightouch.analytics.ConsentCategoryProvider
+import com.hightouch.analytics.ConsentManager
 import com.hightouch.analytics.Middleware
 import com.hightouch.analytics.ValueMap
 import com.hightouch.analytics.integrations.BasePayload
 import com.hightouch.analytics.integrations.TrackPayload
+import com.hightouch.analytics.onetrust.OneTrustConsentProvider
+import com.onetrust.otpublishers.headless.Public.OTPublishersHeadlessSDK
 import io.github.inflationx.calligraphy3.CalligraphyConfig
 import io.github.inflationx.calligraphy3.CalligraphyInterceptor
 import io.github.inflationx.viewpump.ViewPump
 
 class SampleApp : Application() {
+
+    companion object {
+        /** Set when [ConsentConfig.isOneTrustConfigured]; used by MainActivity to show the banner. */
+        var oneTrustSdk: OTPublishersHeadlessSDK? = null
+    }
 
     private val ANALYTICS_WRITE_KEY: String = "your write key"
     override fun onCreate() {
@@ -53,8 +62,23 @@ class SampleApp : Application() {
                 .build()
         )
 
+        // Set up consent: a real OneTrust-backed provider when configured, otherwise the
+        // in-app fake provider toggled from MainActivity.
+        val consentProvider: ConsentCategoryProvider =
+            if (ConsentConfig.isOneTrustConfigured) {
+                val oneTrust = OTPublishersHeadlessSDK(this)
+                oneTrustSdk = oneTrust
+                OneTrustConsentProvider(this, oneTrust, ConsentConfig.CATEGORIES)
+            } else {
+                FakeConsentProvider
+            }
+        val consentManager = ConsentManager.Builder(consentProvider)
+            .integrationCategoryMappings(ConsentConfig.INTEGRATION_CATEGORY_MAPPINGS)
+            .build()
+
         // Initialize a new instance of the Analytics client.
         val builder = Analytics.Builder(this, ANALYTICS_WRITE_KEY)
+            .logLevel(Analytics.LogLevel.VERBOSE)
             .experimentalNanosecondTimestamps()
             .trackApplicationLifecycleEvents()
             .defaultProjectSettings(
@@ -104,11 +128,13 @@ class SampleApp : Application() {
             )
             .flushQueueSize(1)
             .recordScreenViews()
-            .build()
 
-        Analytics.setSingletonInstance(builder)
+        consentManager.attach(builder)
+
+        Analytics.setSingletonInstance(builder.build())
 
         val analytics = Analytics.with(this)
+        consentManager.start(analytics)
 
         analytics.onIntegrationReady(
             "Segment.io",

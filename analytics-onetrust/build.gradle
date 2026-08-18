@@ -1,0 +1,46 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'com.vanniktech.maven.publish'
+
+apply from: rootProject.file('gradle/android.gradle')
+
+// The OneTrust SDK version to compile against. Consumers must declare their own
+// `com.onetrust.cmp:native-sdk` dependency pinned to the version published in their
+// OneTrust tenant; this module never forces a version on them (compileOnly below).
+def oneTrustVersion = '202607.1.0.0'
+
+android {
+	namespace 'com.hightouch.analytics.onetrust'
+
+	defaultConfig {
+		// The OneTrust native SDK does not support the core SDK's minSdk 14.
+		minSdkVersion 21
+	}
+
+	kotlinOptions {
+		jvmTarget = '1.8'
+	}
+}
+
+dependencies {
+	api project(':analytics')
+
+	compileOnly "com.onetrust.cmp:native-sdk:$oneTrustVersion"
+
+	testImplementation "com.onetrust.cmp:native-sdk:$oneTrustVersion"
+	testImplementation 'junit:junit:4.13.2'
+	testImplementation('org.robolectric:robolectric:4.7.3') {
+		exclude group: 'commons-logging', module: 'commons-logging'
+		exclude group: 'org.apache.httpcomponents', module: 'httpclient'
+	}
+	//noinspection GradleDependency (matching the core module's assertj pin)
+	testImplementation 'org.assertj:assertj-core:1.7.1'
+	testImplementation "com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0"
+	// Match the byte-buddy pin used by the core module so Mockito works under Robolectric.
+	testImplementation group: 'net.bytebuddy', name: 'byte-buddy', version: '1.9.0'
+	testImplementation group: 'net.bytebuddy', name: 'byte-buddy-agent', version: '1.9.0'
+}
+
+repositories {
+	mavenCentral()
+}

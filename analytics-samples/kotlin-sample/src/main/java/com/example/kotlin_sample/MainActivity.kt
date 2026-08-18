@@ -31,11 +31,14 @@ import android.text.TextUtils
 import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.kotlin_sample.databinding.ActivityMainBinding
 import com.hightouch.analytics.Analytics
 import com.hightouch.analytics.Traits
+import com.onetrust.otpublishers.headless.Public.OTCallback
+import com.onetrust.otpublishers.headless.Public.Response.OTResponse
 
 class MainActivity : AppCompatActivity() {
 
@@ -46,6 +49,7 @@ class MainActivity : AppCompatActivity() {
         val view = binding.root
         setContentView(view)
         initialSetup()
+        consentSetup()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -140,6 +144,48 @@ class MainActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityMainBinding
+
+    private fun consentSetup() {
+        if (ConsentConfig.isOneTrustConfigured) {
+            // Real OneTrust mode: hide the fake toggles and show the OneTrust banner.
+            binding.consentAnalyticsSwitch.visibility = View.GONE
+            binding.consentAdsSwitch.visibility = View.GONE
+            val oneTrust = SampleApp.oneTrustSdk ?: return
+            oneTrust.startSDK(
+                ConsentConfig.ONETRUST_DOMAIN_URL,
+                ConsentConfig.ONETRUST_DOMAIN_ID,
+                ConsentConfig.ONETRUST_LANGUAGE,
+                null,
+                object : OTCallback {
+                    override fun onSuccess(response: OTResponse) {
+                        runOnUiThread { oneTrust.setupUI(this@MainActivity, 0) }
+                    }
+
+                    override fun onFailure(response: OTResponse) {
+                        runOnUiThread {
+                            Toast.makeText(
+                                this@MainActivity,
+                                "OneTrust init failed: ${response.responseMessage}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }
+            )
+        } else {
+            // Fake provider mode: toggle categories with switches.
+            binding.consentAnalyticsSwitch.isChecked =
+                FakeConsentProvider.isGranted(FakeConsentProvider.CATEGORY_ANALYTICS)
+            binding.consentAdsSwitch.isChecked =
+                FakeConsentProvider.isGranted(FakeConsentProvider.CATEGORY_ADVERTISING)
+            binding.consentAnalyticsSwitch.setOnCheckedChangeListener { _, isChecked ->
+                FakeConsentProvider.setCategory(FakeConsentProvider.CATEGORY_ANALYTICS, isChecked)
+            }
+            binding.consentAdsSwitch.setOnCheckedChangeListener { _, isChecked ->
+                FakeConsentProvider.setCategory(FakeConsentProvider.CATEGORY_ADVERTISING, isChecked)
+            }
+        }
+    }
 
     private fun initialSetup() {
         binding.actionTrackA.setOnClickListener { onAButtonClick() }

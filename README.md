@@ -177,3 +177,20 @@ analyticsContext.putValue(...).putReferrer(...).putCampaign(...);
 AnalyticsContext analyticsContext = Analytics.with(context).getAnalyticsContext();
 analyticsContext.device().putValue("advertisingId", "1");
 ```
+
+## Consent Management
+
+The SDK can stamp every event with CMP consent state (`context.consent.categoryPreferences`) and
+gate destinations (including the Hightouch cloud destination) on consent categories via
+`ConsentManager` and the `ConsentCategoryProvider` interface.
+
+For OneTrust, use the `analytics-onetrust` artifact:
+
+```gradle
+dependencies {
+  implementation 'com.hightouch.analytics.android:analytics-onetrust:X.Y.Z'
+}
+```
+
+See [analytics-onetrust/README.md](analytics-onetrust/README.md) for full setup, and
+`analytics-samples/kotlin-sample` for a working demo.

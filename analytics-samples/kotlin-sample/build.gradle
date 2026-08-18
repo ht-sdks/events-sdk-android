@@ -52,7 +52,12 @@ dependencies {
 	androidTestImplementation 'androidx.test.espresso:espresso-core:3.3.0'
 
 	implementation project(':analytics')
+	implementation project(':analytics-onetrust')
 	implementation project(':analytics-wear')
+
+	// Real OneTrust SDK for the optional banner demo (see ConsentConfig.kt). Apps must pin the
+	// version that matches what's published in their OneTrust tenant.
+	implementation 'com.onetrust.cmp:native-sdk:202607.1.0.0'
 
 	implementation 'io.github.inflationx:calligraphy3:3.1.1'
 	implementation 'io.github.inflationx:viewpump:2.0.3'
