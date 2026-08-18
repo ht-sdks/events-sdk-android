@@ -180,7 +180,8 @@ analyticsContext.device().putValue("advertisingId", "1");
 
 ## Consent Management
 
-The SDK can stamp every event with CMP consent state (`context.consent.categoryPreferences`) and
+The SDK can stamp every event with CMP consent state (`context.consent.categoryPreferences`),
+drop events at the source when they require categories that are not consented, and
 gate destinations (including the Hightouch cloud destination) on consent categories via
 `ConsentManager` and the `ConsentCategoryProvider` interface.
 

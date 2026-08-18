@@ -2,8 +2,8 @@
     <string name="app_name">Segment Sample</string>
     <string name="docs">Docs</string>
     <string name="primary_dark">#12424a</string>
-    <string name="track_button_a">Track Button A</string>
-    <string name="track_button_b">Track Button B</string>
+    <string name="track_button_a">Track Button A (C0002)</string>
+    <string name="track_button_b">Track Purchase (C0004)</string>
     <string name="flush">Flush</string>
     <string name="name">Name</string>
     <string name="email">Email</string>

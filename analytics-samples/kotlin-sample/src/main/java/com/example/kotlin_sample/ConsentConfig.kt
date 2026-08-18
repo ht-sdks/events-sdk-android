@@ -23,11 +23,19 @@ object ConsentConfig {
     )
 
     /**
-     * Destinations gated by category: the Hightouch cloud destination only receives events when
-     * the analytics category (C0002) is consented.
+     * Destinations gated by category. Left unused in the sample so per-event gating is visible
+     * against a single Hightouch cloud destination; pass this to
+     * [com.hightouch.analytics.ConsentManager.Builder.integrationCategoryMappings] to also require
+     * C0002 before anything is delivered to Hightouch.
      */
     val INTEGRATION_CATEGORY_MAPPINGS = mapOf(
         ConsentManager.HIGHTOUCH_INTEGRATION_KEY to listOf(FakeConsentProvider.CATEGORY_ANALYTICS)
+    )
+
+    /** Track event names gated at the source by category. */
+    val EVENT_CATEGORY_MAPPINGS = mapOf(
+        "Button A clicked" to listOf(FakeConsentProvider.CATEGORY_ANALYTICS),
+        "Purchase" to listOf(FakeConsentProvider.CATEGORY_ADVERTISING)
     )
 
     val isOneTrustConfigured: Boolean

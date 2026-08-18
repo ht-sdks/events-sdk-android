@@ -73,7 +73,12 @@ class SampleApp : Application() {
                 FakeConsentProvider
             }
         val consentManager = ConsentManager.Builder(consentProvider)
-            .integrationCategoryMappings(ConsentConfig.INTEGRATION_CATEGORY_MAPPINGS)
+            .eventCategoryMappings(ConsentConfig.EVENT_CATEGORY_MAPPINGS)
+            .lifecycleEventCategories(listOf(FakeConsentProvider.CATEGORY_ANALYTICS))
+            .eventTypeCategoryMapping(
+                BasePayload.Type.screen,
+                listOf(FakeConsentProvider.CATEGORY_ANALYTICS)
+            )
             .build()
 
         // Initialize a new instance of the Analytics client.
@@ -130,6 +135,20 @@ class SampleApp : Application() {
             .recordScreenViews()
 
         consentManager.attach(builder)
+        builder.useSourceMiddleware(
+            Middleware { chain ->
+                val payload = chain.payload()
+                if (payload.type() == BasePayload.Type.track) {
+                    Log.d(
+                        "Consent sample",
+                        "source allowed: ${(payload as TrackPayload).event()}"
+                    )
+                } else {
+                    Log.d("Consent sample", "source allowed: ${payload.type()}")
+                }
+                chain.proceed(payload)
+            }
+        )
 
         Analytics.setSingletonInstance(builder.build())
 

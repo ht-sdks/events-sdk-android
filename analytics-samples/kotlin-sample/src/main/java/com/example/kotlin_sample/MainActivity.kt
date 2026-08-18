@@ -81,12 +81,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun onAButtonClick() {
         com.hightouch.analytics.Analytics.with(this).track("Button A clicked")
-        Toast.makeText(this, "Button A clicked", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Button A clicked (requires C0002)", Toast.LENGTH_SHORT).show()
     }
 
     private fun onBButtonClick() {
-        com.hightouch.analytics.Analytics.with(this).track("Button B clicked")
-        Toast.makeText(this, "Button B clicked", Toast.LENGTH_SHORT).show()
+        com.hightouch.analytics.Analytics.with(this).track("Purchase")
+        Toast.makeText(this, "Purchase tracked (requires C0004)", Toast.LENGTH_SHORT).show()
     }
 
     private fun onIdentifyClick() {

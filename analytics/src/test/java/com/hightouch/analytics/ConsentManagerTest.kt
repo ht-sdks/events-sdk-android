@@ -383,4 +383,180 @@ class ConsentManagerTest {
         // Event flowed through source middleware with a stamp showing C0002 denied.
         assertThat(categoryPreferencesOf(payloadRef.get())!!["C0002"]).isEqualTo(false)
     }
+
+    // --- Source (per-event) gating ---
+
+    private fun analyticsRecordingSource(
+        configure: ConsentManager.Builder.() -> Unit = {}
+    ): Pair<Analytics, MutableList<BasePayload>> {
+        val seen = mutableListOf<BasePayload>()
+        val analytics = consentManager(configure = configure)
+            .attach(builder)
+            .useSourceMiddleware { chain ->
+                seen.add(chain.payload())
+                chain.proceed(chain.payload())
+            }
+            .build()
+        return analytics to seen
+    }
+
+    private fun trackNames(payloads: List<BasePayload>): List<String> {
+        return payloads.filterIsInstance<TrackPayload>().map { it.event() }
+    }
+
+    @Test
+    fun sourceDropsMappedEventWhenCategoryDenied() {
+        provider.setStatus("C0004", true)
+        val (analytics, seen) = analyticsRecordingSource {
+            eventCategoryMapping("Purchase", listOf("C0004"))
+            eventCategoryMapping("Application Opened", listOf("C0002"))
+        }
+
+        analytics.track("Purchase")
+        analytics.track("Application Opened")
+        analytics.track("unmapped")
+
+        assertThat(trackNames(seen)).containsExactly("Purchase", "unmapped")
+    }
+
+    @Test
+    fun sourceAllowsMappedEventWhenCategoryGranted() {
+        provider.setStatus("C0002", true)
+        val (analytics, seen) = analyticsRecordingSource {
+            eventCategoryMapping("Application Opened", listOf("C0002"))
+        }
+
+        analytics.track("Application Opened")
+
+        assertThat(trackNames(seen)).containsExactly("Application Opened")
+        assertThat(categoryPreferencesOf(seen.first())!!["C0002"]).isEqualTo(true)
+    }
+
+    @Test
+    fun lifecycleEventCategoriesMapsSdkLifecycleNames() {
+        provider.setStatus("C0004", true)
+        val (analytics, seen) = analyticsRecordingSource {
+            lifecycleEventCategories(listOf("C0002"))
+            eventCategoryMapping("Purchase", listOf("C0004"))
+        }
+
+        analytics.track("Application Installed")
+        analytics.track("Application Opened")
+        analytics.track("Application Backgrounded")
+        analytics.track("Deep Link Opened")
+        analytics.track("Purchase")
+
+        assertThat(trackNames(seen)).containsExactly("Purchase")
+    }
+
+    @Test
+    fun eventTypeCategoryMappingGatesScreens() {
+        val (analytics, seen) = analyticsRecordingSource {
+            eventTypeCategoryMapping(BasePayload.Type.screen, listOf("C0002"))
+        }
+
+        analytics.screen("Home")
+        analytics.track("foo")
+
+        assertThat(seen).hasSize(1)
+        assertThat(seen.first().type()).isEqualTo(BasePayload.Type.track)
+    }
+
+    @Test
+    fun defaultEventCategoriesGatesUnmappedEvents() {
+        val (analytics, seen) = analyticsRecordingSource {
+            eventCategoryMapping("Purchase", listOf("C0004"))
+            defaultEventCategories(listOf("C0002"))
+        }
+        provider.setStatus("C0004", true)
+
+        analytics.identify("user-1")
+        analytics.track("Purchase")
+        analytics.track("foo")
+
+        assertThat(trackNames(seen)).containsExactly("Purchase")
+        assertThat(seen.filter { it.type() == BasePayload.Type.identify }).isEmpty()
+    }
+
+    @Test
+    fun perCallRequireConsentCategoriesOverridesEventNameMapping() {
+        provider.setStatus("C0004", true)
+        val (analytics, seen) = analyticsRecordingSource {
+            eventCategoryMapping("Purchase", listOf("C0004"))
+        }
+
+        analytics.track("Purchase", null, Options().requireConsentCategories("C0002"))
+        analytics.track("Purchase")
+
+        assertThat(trackNames(seen)).containsExactly("Purchase")
+    }
+
+    @Test
+    fun consentUpdatedBypassesSourceEventGate() {
+        val trackedEvents = mutableListOf<TrackPayload>()
+        val manager = consentManager {
+            defaultEventCategories(listOf("C0002"))
+        }
+        val analytics = manager
+            .attach(builder)
+            .useSourceMiddleware { chain ->
+                val payload = chain.payload()
+                if (payload is TrackPayload) trackedEvents.add(payload)
+                chain.proceed(payload)
+            }
+            .build()
+        manager.start(analytics)
+
+        // C0002 is still false; Consent Updated must not be dropped by defaultEventCategories.
+        provider.setStatus("C0001", false)
+
+        assertThat(trackedEvents).hasSize(1)
+        assertThat(trackedEvents.first().event()).isEqualTo("Consent Updated")
+    }
+
+    @Test
+    fun sourceAndDestinationGatingCompose() {
+        provider.setStatus("C0004", true)
+        val sourceSeen = mutableListOf<BasePayload>()
+        val analytics = consentManager(
+            mapOf(ConsentManager.HIGHTOUCH_INTEGRATION_KEY to listOf("C0002"))
+        ) {
+            eventCategoryMapping("Purchase", listOf("C0004"))
+        }
+            .attach(builder)
+            .useSourceMiddleware { chain ->
+                sourceSeen.add(chain.payload())
+                chain.proceed(chain.payload())
+            }
+            .build()
+
+        analytics.track("Purchase")
+        analytics.track("Application Opened")
+
+        // Purchase passes source (C0004 granted) even though the Hightouch destination
+        // still requires C0002. Unmapped Application Opened also passes source.
+        assertThat(trackNames(sourceSeen)).containsExactly("Purchase", "Application Opened")
+    }
+
+    @Test
+    fun requiredCategoriesResolutionOrder() {
+        val manager = consentManager {
+            eventCategoryMapping("Purchase", listOf("C0004"))
+            eventTypeCategoryMapping(BasePayload.Type.track, listOf("C0002"))
+            defaultEventCategories(listOf("C0001"))
+        }
+
+        assertThat(manager.requiredCategories(trackPayload("Purchase")))
+            .containsExactly("C0004")
+        assertThat(manager.requiredCategories(trackPayload("other")))
+            .containsExactly("C0002")
+
+        val overridePayload =
+            TrackPayload.Builder()
+                .event("Purchase")
+                .userId("user")
+                .context(mapOf(Options.CONSENT_REQUIRED_CATEGORIES_KEY to listOf("C0001")))
+                .build()
+        assertThat(manager.requiredCategories(overridePayload)).containsExactly("C0001")
+    }
 }

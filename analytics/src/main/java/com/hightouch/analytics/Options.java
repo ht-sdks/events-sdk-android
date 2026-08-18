@@ -23,7 +23,10 @@
  */
 package com.hightouch.analytics;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -39,6 +42,12 @@ public class Options {
      * how to use this key.
      */
     public static final String ALL_INTEGRATIONS_KEY = "All";
+
+    /**
+     * Context key holding a list of CMP category IDs this call requires. Set via {@link
+     * #requireConsentCategories(List)}; read by {@link ConsentManager} source middleware.
+     */
+    public static final String CONSENT_REQUIRED_CATEGORIES_KEY = "consentRequiredCategories";
 
     private final Map<String, Object> integrations; // passed in by the user
     private final Map<String, Object> context;
@@ -133,6 +142,24 @@ public class Options {
      */
     public Options putContext(String key, Object value) {
         context.put(key, value);
+        return this;
+    }
+
+    /**
+     * Requires these CMP category IDs to be consented before this call may proceed past {@link
+     * ConsentManager} source middleware. Overrides event-name, event-type, and default mappings
+     * for this call only. An empty list means this call has no event-level requirement.
+     */
+    public Options requireConsentCategories(String... categories) {
+        return requireConsentCategories(Arrays.asList(categories));
+    }
+
+    /** @see #requireConsentCategories(String...) */
+    public Options requireConsentCategories(List<String> categories) {
+        if (categories == null) {
+            throw new NullPointerException("categories == null");
+        }
+        context.put(CONSENT_REQUIRED_CATEGORIES_KEY, new ArrayList<>(categories));
         return this;
     }
 
