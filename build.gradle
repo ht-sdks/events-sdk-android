@@ -1,10 +1,13 @@
 apply from: rootProject.file('gradle/versioning.gradle')
 
 buildscript {
-    // 2.4.20-RC3 is the newest release that includes the CVE-2026-53914 fix
-    // (unsafe deserialization in Kotlin build cache). 2.4.10 and earlier remain
-    // affected; stable 2.4.20 is not published yet.
-    ext.kotlin_version = '2.4.20-RC3'
+    // Runtime stdlib stays on the last 1.9.x stable so published artifacts do
+    // not depend on a Kotlin 2.4 RC. The Gradle plugin is upgraded separately
+    // to pick up the CVE-2026-53914 build-cache deserialization fix.
+    ext.kotlin_version = '1.9.25'
+    // 2.4.20-RC3 is the newest release that includes the CVE-2026-53914 fix.
+    // 2.4.10 and earlier remain affected; stable 2.4.20 is not published yet.
+    ext.kotlin_plugin_version = '2.4.20-RC3'
   repositories {
   mavenCentral()
   google()
@@ -15,7 +18,7 @@ buildscript {
 
   dependencies {
     classpath 'com.android.tools.build:gradle:8.7.3'
-    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_plugin_version"
     classpath 'com.vanniktech:gradle-maven-publish-plugin:0.35.0'
   }
 }
