@@ -1,7 +1,10 @@
 apply from: rootProject.file('gradle/versioning.gradle')
 
 buildscript {
-    ext.kotlin_version = '1.9.25'
+    // 2.4.20-RC3 is the newest release that includes the CVE-2026-53914 fix
+    // (unsafe deserialization in Kotlin build cache). 2.4.10 and earlier remain
+    // affected; stable 2.4.20 is not published yet.
+    ext.kotlin_version = '2.4.20-RC3'
   repositories {
   mavenCentral()
   google()
