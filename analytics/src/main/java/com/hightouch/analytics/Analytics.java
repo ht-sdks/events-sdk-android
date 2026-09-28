@@ -1697,6 +1697,7 @@ public class Analytics {
             }
             ValueMap settings = integrationSettings.getValueMap(key);
             if (!(factory instanceof WebhookIntegration.WebhookIntegrationFactory)
+                    && !(factory instanceof Integration.LocallyConfiguredFactory)
                     && Utils.isNullOrEmpty(settings)) {
                 logger.debug("Integration %s is not enabled.", key);
                 continue;

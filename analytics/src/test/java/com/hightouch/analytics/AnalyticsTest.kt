@@ -708,6 +708,54 @@ open class AnalyticsTest {
     }
 
     @Test
+    fun locallyConfiguredFactoryIsCreatedWithoutProjectSettings() {
+        Analytics.INSTANCES.clear()
+        val localFactory = object : Integration.LocallyConfiguredFactory {
+            override fun create(settings: ValueMap?, analytics: Analytics): Integration<*> {
+                return integration
+            }
+
+            override fun key(): String {
+                return "not-in-settings"
+            }
+        }
+        analytics = Analytics(
+            application,
+            networkExecutor,
+            stats,
+            traitsCache,
+            analyticsContext,
+            defaultOptions,
+            Logger.with(Analytics.LogLevel.NONE),
+            "qaz", listOf(localFactory),
+            client,
+            Cartographer.INSTANCE,
+            projectSettingsCache,
+            "foo",
+            DEFAULT_FLUSH_QUEUE_SIZE,
+            DEFAULT_FLUSH_INTERVAL.toLong(),
+            analyticsExecutor,
+            false,
+            CountDownLatch(0),
+            false,
+            false,
+            optOut,
+            Crypto.none(), emptyList(), emptyMap(),
+            jsMiddleware,
+            ValueMap(),
+            lifecycle,
+            false,
+            true,
+            null,
+            DEFAULT_API_HOST
+        )
+
+        analytics.track("event")
+
+        verify(integration).track(any())
+    }
+
+    @Test
     fun shutdown() {
         assertThat(analytics.shutdown).isFalse()
         analytics.shutdown()
