@@ -399,7 +399,9 @@ public class BrazeIntegrationTest {
 
     @Test
     public void purchaseProductIdentifierName() {
-        options.purchaseProductIdentifier(BrazeIntegration.ProductIdentifier.NAME);
+        options.purchaseGrouping(
+                BrazeIntegration.PurchaseGrouping.perProduct(
+                        BrazeIntegration.ProductIdentifier.NAME));
         integration()
                 .track(
                         track(
@@ -433,8 +435,8 @@ public class BrazeIntegrationTest {
     }
 
     @Test
-    public void bundleCommerceEventsLogsOnePurchasePerOrder() throws Exception {
-        options.bundleCommerceEvents(true);
+    public void perOrderGroupingLogsOnePurchasePerOrder() throws Exception {
+        options.purchaseGrouping(BrazeIntegration.PurchaseGrouping.perOrder());
         integration()
                 .track(
                         track(
@@ -484,7 +486,8 @@ public class BrazeIntegrationTest {
 
     @Test
     public void customPurchaseEventNames() {
-        options.purchaseEventNames("Membership Purchased");
+        options.purchaseDetection(
+                BrazeIntegration.PurchaseDetection.eventNames("Membership Purchased"));
         integration().track(track("Membership Purchased", new ValueMap().putValue("total", 5)));
         integration().track(track("Order Completed", new ValueMap().putValue("total", 5)));
 
@@ -493,25 +496,25 @@ public class BrazeIntegrationTest {
     }
 
     @Test
-    public void purchaseEventMatcherOverridesNames() {
-        options.purchaseEventNames("Membership Purchased")
-                .purchaseEventMatcher(track -> "Upgraded".equals(track.event()));
+    public void purchaseEventMatcherReplacesDefaultNames() {
+        options.purchaseDetection(
+                BrazeIntegration.PurchaseDetection.matcher(
+                        track -> "Upgraded".equals(track.event())));
         integration().track(track("Upgraded", new ValueMap().putValue("total", 5)));
-        integration().track(track("Membership Purchased", new ValueMap().putValue("revenue", 5)));
         integration().track(track("Order Completed", new ValueMap().putValue("revenue", 5)));
 
         capturePurchase("Upgraded", "USD", "5.0", 1);
-        verify(braze).logCustomEvent(eq("Membership Purchased"), any());
         verify(braze).logCustomEvent(eq("Order Completed"), any());
     }
 
     @Test
     public void purchaseEventMatcherErrorLogsCustomEvent() {
         RuntimeException error = new RuntimeException("boom");
-        options.purchaseEventMatcher(
-                track -> {
-                    throw error;
-                });
+        options.purchaseDetection(
+                BrazeIntegration.PurchaseDetection.matcher(
+                        track -> {
+                            throw error;
+                        }));
         Logger logger = mock(Logger.class);
         new BrazeIntegration(braze, options, preferences, logger)
                 .track(track("Order Completed", new ValueMap().putValue("total", 5)));
@@ -556,7 +559,7 @@ public class BrazeIntegrationTest {
         assertThat(contexts.get(0).order()).containsKey("products");
         assertThat(contexts.get(0).product()).containsEntry("sku", "SKU-1");
 
-        options.bundleCommerceEvents(true);
+        options.purchaseGrouping(BrazeIntegration.PurchaseGrouping.perOrder());
         integration().track(track);
         capturePurchase("X-Order Completed", "EUR", "9.5", 3);
         assertThat(contexts.get(1).product()).isNull();

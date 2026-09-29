@@ -76,6 +76,85 @@ public class BrazeIntegration extends Integration<Braze> {
         boolean isPurchaseEvent(@NonNull TrackPayload track);
     }
 
+    /** Which {@code track} calls are logged as Braze purchases. */
+    public abstract static class PurchaseDetection {
+        private PurchaseDetection() {}
+
+        /** {@code track} event names (exact, case-sensitive) logged as purchases. */
+        @NonNull
+        public static PurchaseDetection eventNames(@NonNull String... names) {
+            return new EventNames(new HashSet<>(Arrays.asList(names)));
+        }
+
+        /**
+         * Decide which {@code track} calls are purchases yourself. If it throws, the event is
+         * logged as a custom event.
+         */
+        @NonNull
+        public static PurchaseDetection matcher(@NonNull PurchaseEventMatcher matcher) {
+            return new Custom(matcher);
+        }
+
+        abstract boolean isPurchaseEvent(TrackPayload track);
+
+        private static final class EventNames extends PurchaseDetection {
+            private final Set<String> names;
+
+            EventNames(Set<String> names) {
+                this.names = names;
+            }
+
+            @Override
+            boolean isPurchaseEvent(TrackPayload track) {
+                return names.contains(track.event());
+            }
+        }
+
+        private static final class Custom extends PurchaseDetection {
+            private final PurchaseEventMatcher matcher;
+
+            Custom(PurchaseEventMatcher matcher) {
+                this.matcher = matcher;
+            }
+
+            @Override
+            boolean isPurchaseEvent(TrackPayload track) {
+                return matcher.isPurchaseEvent(track);
+            }
+        }
+    }
+
+    /** Whether a purchase event logs one Braze purchase per product or one per order. */
+    public abstract static class PurchaseGrouping {
+        private PurchaseGrouping() {}
+
+        /**
+         * One purchase per product, with {@code identifier} as the {@code productId}. SKU falls
+         * back to {@code product_id} and then {@code name}. An order without products logs one
+         * purchase named after the event.
+         */
+        @NonNull
+        public static PurchaseGrouping perProduct(@NonNull ProductIdentifier identifier) {
+            return new PerProduct(identifier);
+        }
+
+        /** One purchase per order, named after the event. */
+        @NonNull
+        public static PurchaseGrouping perOrder() {
+            return new PerOrder();
+        }
+
+        private static final class PerProduct extends PurchaseGrouping {
+            final ProductIdentifier identifier;
+
+            PerProduct(ProductIdentifier identifier) {
+                this.identifier = identifier;
+            }
+        }
+
+        private static final class PerOrder extends PurchaseGrouping {}
+    }
+
     /**
      * Changes or skips each purchase before it's logged. Return {@code null} to skip the purchase.
      * If it throws, the default purchase is logged.
@@ -218,12 +297,10 @@ public class BrazeIntegration extends Integration<Braze> {
         private final BrazeConfig config;
         private final Braze braze;
         private boolean trackSessions;
-        ProductIdentifier purchaseProductIdentifier = ProductIdentifier.SKU;
-        boolean bundleCommerceEvents;
+        PurchaseGrouping purchaseGrouping = PurchaseGrouping.perProduct(ProductIdentifier.SKU);
         boolean forwardScreenViews;
-        Set<String> purchaseEventNames =
-                new HashSet<>(Arrays.asList("Order Completed", "Completed Order"));
-        PurchaseEventMatcher purchaseEventMatcher;
+        PurchaseDetection purchaseDetection =
+                PurchaseDetection.eventNames("Order Completed", "Completed Order");
         PurchaseTransformer purchaseTransformer;
         boolean stringifyAttributeValues;
 
@@ -249,17 +326,11 @@ public class BrazeIntegration extends Integration<Braze> {
         }
 
         /**
-         * Which product field becomes the purchase {@code productId}. Defaults to SKU, which falls
-         * back to {@code product_id} and then {@code name}.
+         * Whether a purchase event logs one purchase per product or one per order. Defaults to
+         * {@link PurchaseGrouping#perProduct} with {@link ProductIdentifier#SKU}.
          */
-        public Builder purchaseProductIdentifier(@NonNull ProductIdentifier identifier) {
-            this.purchaseProductIdentifier = identifier;
-            return this;
-        }
-
-        /** Log one purchase per order, named after the event, instead of one per product. */
-        public Builder bundleCommerceEvents(boolean bundleCommerceEvents) {
-            this.bundleCommerceEvents = bundleCommerceEvents;
+        public Builder purchaseGrouping(@NonNull PurchaseGrouping grouping) {
+            this.purchaseGrouping = grouping;
             return this;
         }
 
@@ -270,20 +341,11 @@ public class BrazeIntegration extends Integration<Braze> {
         }
 
         /**
-         * {@code track} event names (exact, case-sensitive) logged as purchases. Defaults to
-         * {@code Order Completed} and {@code Completed Order}.
+         * Which {@code track} calls are logged as purchases. Defaults to {@link
+         * PurchaseDetection#eventNames} with {@code Order Completed} and {@code Completed Order}.
          */
-        public Builder purchaseEventNames(@NonNull String... names) {
-            this.purchaseEventNames = new HashSet<>(Arrays.asList(names));
-            return this;
-        }
-
-        /**
-         * Decide which {@code track} calls are purchases yourself. When set, this overrides {@link
-         * #purchaseEventNames}. If it throws, the event is logged as a custom event.
-         */
-        public Builder purchaseEventMatcher(@NonNull PurchaseEventMatcher matcher) {
-            this.purchaseEventMatcher = matcher;
+        public Builder purchaseDetection(@NonNull PurchaseDetection detection) {
+            this.purchaseDetection = detection;
             return this;
         }
 
@@ -353,11 +415,9 @@ public class BrazeIntegration extends Integration<Braze> {
     private final Braze braze;
     private final SharedPreferences preferences;
     private final Logger logger;
-    private final ProductIdentifier purchaseProductIdentifier;
-    private final boolean bundleCommerceEvents;
+    private final PurchaseGrouping purchaseGrouping;
     private final boolean forwardScreenViews;
-    private final Set<String> purchaseEventNames;
-    private final PurchaseEventMatcher purchaseEventMatcher;
+    private final PurchaseDetection purchaseDetection;
     private final PurchaseTransformer purchaseTransformer;
     private final boolean stringifyAttributeValues;
 
@@ -365,11 +425,9 @@ public class BrazeIntegration extends Integration<Braze> {
         this.braze = braze;
         this.preferences = preferences;
         this.logger = logger;
-        this.purchaseProductIdentifier = options.purchaseProductIdentifier;
-        this.bundleCommerceEvents = options.bundleCommerceEvents;
+        this.purchaseGrouping = options.purchaseGrouping;
         this.forwardScreenViews = options.forwardScreenViews;
-        this.purchaseEventNames = options.purchaseEventNames;
-        this.purchaseEventMatcher = options.purchaseEventMatcher;
+        this.purchaseDetection = options.purchaseDetection;
         this.purchaseTransformer = options.purchaseTransformer;
         this.stringifyAttributeValues = options.stringifyAttributeValues;
     }
@@ -731,15 +789,12 @@ public class BrazeIntegration extends Integration<Braze> {
     }
 
     private boolean isPurchase(TrackPayload track) {
-        if (purchaseEventMatcher != null) {
-            try {
-                return purchaseEventMatcher.isPurchaseEvent(track);
-            } catch (Exception e) {
-                logger.error(e, "Purchase event matcher failed for %s.", track.event());
-                return false;
-            }
+        try {
+            return purchaseDetection.isPurchaseEvent(track);
+        } catch (Exception e) {
+            logger.error(e, "Purchase event matcher failed for %s.", track.event());
+            return false;
         }
-        return purchaseEventNames.contains(track.event());
     }
 
     private void logPurchases(TrackPayload track, Properties properties) {
@@ -750,7 +805,7 @@ public class BrazeIntegration extends Integration<Braze> {
                         : "USD";
         List<Map<String, Object>> products = products(properties.get("products"));
 
-        if (bundleCommerceEvents || products.isEmpty()) {
+        if (!(purchaseGrouping instanceof PurchaseGrouping.PerProduct) || products.isEmpty()) {
             BigDecimal total =
                     BigDecimal.valueOf(
                             number(
@@ -764,6 +819,7 @@ public class BrazeIntegration extends Integration<Braze> {
             return;
         }
 
+        ProductIdentifier identifier = ((PurchaseGrouping.PerProduct) purchaseGrouping).identifier;
         Map<String, Object> order = new LinkedHashMap<>(properties);
         order.remove("products");
         for (Map<String, Object> product : products) {
@@ -773,7 +829,7 @@ public class BrazeIntegration extends Integration<Braze> {
             purchase.remove("quantity");
             logPurchase(
                     new BrazePurchase(
-                            productId(product),
+                            productId(product, identifier),
                             BigDecimal.valueOf(number(product.get("price"), 0)),
                             currency,
                             (int) number(product.get("quantity"), 1),
@@ -808,9 +864,9 @@ public class BrazeIntegration extends Integration<Braze> {
                 brazeProperties(purchase.properties()));
     }
 
-    private String productId(Map<String, Object> product) {
+    private static String productId(Map<String, Object> product, ProductIdentifier identifier) {
         List<String> keys =
-                purchaseProductIdentifier == ProductIdentifier.NAME
+                identifier == ProductIdentifier.NAME
                         ? Collections.singletonList("name")
                         : Arrays.asList("sku", "product_id", "name");
         for (String key : keys) {
