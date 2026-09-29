@@ -70,6 +70,11 @@ public class BrazeIntegration extends Integration<Braze> {
         NAME
     }
 
+    /** Decides whether a {@code track} call is logged as a Braze purchase. */
+    public interface PurchaseEventMatcher {
+        boolean isPurchaseEvent(@NonNull TrackPayload track);
+    }
+
     static final String PREFERENCES_NAME = "hightouch-braze";
     private static final String USER_ID_PREFERENCE = "userId";
     private static final String ATTRIBUTES_PREFERENCE = "attributes";
@@ -116,6 +121,9 @@ public class BrazeIntegration extends Integration<Braze> {
         ProductIdentifier purchaseProductIdentifier = ProductIdentifier.SKU;
         boolean bundleCommerceEvents;
         boolean forwardScreenViews;
+        Set<String> purchaseEventNames =
+                new HashSet<>(Arrays.asList("Order Completed", "Completed Order"));
+        PurchaseEventMatcher purchaseEventMatcher;
         boolean logPurchaseWhenRevenuePresent;
         boolean stringifyAttributeValues;
 
@@ -155,6 +163,25 @@ public class BrazeIntegration extends Integration<Braze> {
         /** Log {@code screen} calls as Braze custom events. */
         public Builder forwardScreenViews(boolean forwardScreenViews) {
             this.forwardScreenViews = forwardScreenViews;
+            return this;
+        }
+
+        /**
+         * {@code track} event names (exact, case-sensitive) logged as purchases. Defaults to
+         * {@code Order Completed} and {@code Completed Order}.
+         */
+        public Builder purchaseEventNames(@NonNull String... names) {
+            this.purchaseEventNames = new HashSet<>(Arrays.asList(names));
+            return this;
+        }
+
+        /**
+         * Decide which {@code track} calls are purchases yourself. When set, this overrides {@link
+         * #purchaseEventNames} and {@link #logPurchaseWhenRevenuePresent}. If it throws, the event
+         * is logged as a custom event.
+         */
+        public Builder purchaseEventMatcher(@NonNull PurchaseEventMatcher matcher) {
+            this.purchaseEventMatcher = matcher;
             return this;
         }
 
@@ -227,6 +254,8 @@ public class BrazeIntegration extends Integration<Braze> {
     private final ProductIdentifier purchaseProductIdentifier;
     private final boolean bundleCommerceEvents;
     private final boolean forwardScreenViews;
+    private final Set<String> purchaseEventNames;
+    private final PurchaseEventMatcher purchaseEventMatcher;
     private final boolean logPurchaseWhenRevenuePresent;
     private final boolean stringifyAttributeValues;
 
@@ -237,6 +266,8 @@ public class BrazeIntegration extends Integration<Braze> {
         this.purchaseProductIdentifier = options.purchaseProductIdentifier;
         this.bundleCommerceEvents = options.bundleCommerceEvents;
         this.forwardScreenViews = options.forwardScreenViews;
+        this.purchaseEventNames = options.purchaseEventNames;
+        this.purchaseEventMatcher = options.purchaseEventMatcher;
         this.logPurchaseWhenRevenuePresent = options.logPurchaseWhenRevenuePresent;
         this.stringifyAttributeValues = options.stringifyAttributeValues;
     }
@@ -282,10 +313,7 @@ public class BrazeIntegration extends Integration<Braze> {
             if ("Install Attributed".equals(event) && properties.get("campaign") != null) {
                 setAttributionData(properties.get("campaign"));
             }
-            if ("Order Completed".equals(event)
-                    || "Completed Order".equals(event)
-                    || (logPurchaseWhenRevenuePresent
-                            && number(properties.get("revenue"), 0) != 0)) {
+            if (isPurchase(track, event, properties)) {
                 logPurchase(event, properties);
             } else {
                 braze.logCustomEvent(event, brazeProperties(properties));
@@ -612,6 +640,19 @@ public class BrazeIntegration extends Integration<Braze> {
                         string(fields.get("ad_group")),
                         string(fields.get("ad_creative")));
         updateUser(Collections.<UserUpdate>singletonList(user -> user.setAttributionData(data)));
+    }
+
+    private boolean isPurchase(TrackPayload track, String event, Properties properties) {
+        if (purchaseEventMatcher != null) {
+            try {
+                return purchaseEventMatcher.isPurchaseEvent(track);
+            } catch (Exception e) {
+                logger.error(e, "Purchase event matcher failed for %s.", track.event());
+                return false;
+            }
+        }
+        return purchaseEventNames.contains(event)
+                || (logPurchaseWhenRevenuePresent && number(properties.get("revenue"), 0) != 0);
     }
 
     private void logPurchase(String event, Properties properties) {

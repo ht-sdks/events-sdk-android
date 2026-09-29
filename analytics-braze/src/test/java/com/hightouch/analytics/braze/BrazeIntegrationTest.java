@@ -2,6 +2,7 @@ package com.hightouch.analytics.braze;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -437,6 +438,58 @@ public class BrazeIntegrationTest {
         integration().track(track("Browsed", new ValueMap().putValue("revenue", 0)));
         capturePurchase("Upgraded", "USD", "9.99", 1);
         verify(braze).logCustomEvent(eq("Browsed"), any());
+    }
+
+    @Test
+    public void defaultPurchaseEventNames() {
+        integration().track(track("Order Completed", new ValueMap().putValue("total", 5)));
+        integration().track(track("Completed Order", new ValueMap().putValue("total", 5)));
+        integration().track(track("order completed", new ValueMap().putValue("total", 5)));
+
+        capturePurchase("Order Completed", "USD", "5.0", 1);
+        capturePurchase("Completed Order", "USD", "5.0", 1);
+        verify(braze).logCustomEvent(eq("order completed"), any());
+    }
+
+    @Test
+    public void customPurchaseEventNames() {
+        options.purchaseEventNames("Membership Purchased");
+        integration().track(track("Membership Purchased", new ValueMap().putValue("total", 5)));
+        integration().track(track("Order Completed", new ValueMap().putValue("total", 5)));
+
+        capturePurchase("Membership Purchased", "USD", "5.0", 1);
+        verify(braze).logCustomEvent(eq("Order Completed"), any());
+    }
+
+    @Test
+    public void purchaseEventMatcherOverridesNamesAndRevenue() {
+        options.purchaseEventNames("Membership Purchased")
+                .logPurchaseWhenRevenuePresent(true)
+                .purchaseEventMatcher(track -> "Upgraded".equals(track.event()));
+        integration().track(track("Upgraded", new ValueMap().putValue("total", 5)));
+        integration().track(track("Membership Purchased", new ValueMap().putValue("revenue", 5)));
+        integration().track(track("Order Completed", new ValueMap().putValue("revenue", 5)));
+
+        capturePurchase("Upgraded", "USD", "5.0", 1);
+        verify(braze).logCustomEvent(eq("Membership Purchased"), any());
+        verify(braze).logCustomEvent(eq("Order Completed"), any());
+    }
+
+    @Test
+    public void purchaseEventMatcherErrorLogsCustomEvent() {
+        RuntimeException error = new RuntimeException("boom");
+        options.purchaseEventMatcher(
+                track -> {
+                    throw error;
+                });
+        Logger logger = mock(Logger.class);
+        new BrazeIntegration(braze, options, preferences, logger)
+                .track(track("Order Completed", new ValueMap().putValue("total", 5)));
+
+        verify(logger).error(eq(error), anyString(), any());
+        verify(braze).logCustomEvent(eq("Order Completed"), any());
+        verify(braze, never())
+                .logPurchase(anyString(), anyString(), any(), anyInt(), any(BrazeProperties.class));
     }
 
     @Test
