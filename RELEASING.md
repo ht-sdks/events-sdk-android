@@ -8,6 +8,7 @@
 1. Push tags to github
 1. The [tagged-release](.github/workflows/tagged-release.yml) workflow publishes to Maven Central
 1. Confirm the version on the [Central Portal Deployments](https://central.sonatype.com/publishing) page, then on the [public artifact page](https://central.sonatype.com/artifact/com.hightouch.analytics.android/analytics) (may take ~15 minutes after release)
+1. The same release publishes the other library modules at the same version (`analytics-wear`, [`analytics-braze`](https://central.sonatype.com/artifact/com.hightouch.analytics.android/analytics-braze)); confirm them too
 
 JitPack continues to build from tags on demand for consumers still on the old `com.github.ht-sdks.events-sdk-android` coordinates — no separate JitPack release step is required.
 
