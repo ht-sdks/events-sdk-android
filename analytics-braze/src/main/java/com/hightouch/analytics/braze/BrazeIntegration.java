@@ -767,18 +767,13 @@ public class BrazeIntegration extends Integration<Braze> {
         Map<String, Object> order = new LinkedHashMap<>(properties);
         order.remove("products");
         for (Map<String, Object> product : products) {
-            String productId = productId(product);
-            if (productId == null) {
-                logger.info("Dropping purchase of a product without an identifier: %s", product);
-                continue;
-            }
             Map<String, Object> purchase = new LinkedHashMap<>(order);
             purchase.putAll(product);
             purchase.remove("price");
             purchase.remove("quantity");
             logPurchase(
                     new BrazePurchase(
-                            productId,
+                            productId(product),
                             BigDecimal.valueOf(number(product.get("price"), 0)),
                             currency,
                             (int) number(product.get("quantity"), 1),
@@ -824,7 +819,7 @@ public class BrazeIntegration extends Integration<Braze> {
                 return String.valueOf(id);
             }
         }
-        return null;
+        return "";
     }
 
     private static List<Map<String, Object>> products(Object value) {

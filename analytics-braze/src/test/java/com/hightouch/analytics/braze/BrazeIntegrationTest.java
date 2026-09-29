@@ -587,6 +587,19 @@ public class BrazeIntegrationTest {
     }
 
     @Test
+    public void purchaseTransformerCanSetMissingProductId() {
+        options.purchaseTransformer(
+                (purchase, context) ->
+                        purchase.productId().isEmpty()
+                                ? purchase.withProductId(
+                                        String.valueOf(context.product().get("id")))
+                                : purchase);
+        integration().track(order(new ValueMap().putValue("id", "legacy-1")));
+
+        capturePurchase("legacy-1", "USD", "0.0", 1);
+    }
+
+    @Test
     public void purchaseTransformerErrorLogsDefaultPurchase() throws Exception {
         RuntimeException error = new RuntimeException("boom");
         options.purchaseTransformer(
