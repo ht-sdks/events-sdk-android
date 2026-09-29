@@ -1,6 +1,6 @@
 # Agent Instructions
 
-This file provides guidance for AI agents updating dependencies in this Android SDK repository.
+This file provides guidance for AI agents working in this Android SDK repository.
 
 ## Project Overview
 
@@ -9,6 +9,18 @@ This file provides guidance for AI agents updating dependencies in this Android 
 - **JDK**: 11 (required)
 - **Testing**: JUnit 4 + Robolectric
 - **CI command**: `./gradlew check build assembleAndroidTest`
+
+---
+
+## File headers
+
+Do not add an in-file MIT license block to new files.
+
+Many existing sources open with a large comment that starts `The MIT License (MIT)` and `Copyright (c) 2014 Segment, Inc.` This repository is a fork of Segment's SDK. That header attributes the file to Segment. Code we add is Hightouch's, so copying the block onto a new file misattributes the copyright.
+
+Licensing for the repository already lives in `LICENSE.md` (Hightouch's MIT license, plus Segment's MIT license for the forked code). A second copy inside each file is redundant. Start new files at the code itself, or at the usual tooling header such as an XML declaration. Do not add a Segment banner, and do not add a Hightouch copyright banner in its place.
+
+Leave the Segment header on files that already have it.
 
 ---
 
