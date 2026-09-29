@@ -46,6 +46,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
@@ -168,7 +169,8 @@ public class BrazeIntegrationTest {
                 new ValueMap()
                         .putValue("city", "Denver")
                         .putValue("country", "US")
-                        .putValue("postalCode", "80202");
+                        .putValue("postalCode", "80202")
+                        .putValue("state", "CO");
         integration()
                 .identify(
                         identify(
@@ -178,8 +180,8 @@ public class BrazeIntegrationTest {
                                         .putValue("anonymousId", "anon")
                                         .putValue("firstName", "Ada")
                                         .putValue("last_name", "Lovelace")
-                                        .putValue("Email", "ada@example.com")
-                                        .putValue("$Mobile", "555-0100")
+                                        .putValue("email", "ada@example.com")
+                                        .putValue("phone", "555-0100")
                                         .putValue("gender", "Female")
                                         .putValue("birthday", "1990-05-15")
                                         .putValue("address", address)
@@ -194,39 +196,56 @@ public class BrazeIntegrationTest {
         verify(user).setDateOfBirth(1990, Month.MAY, 15);
         verify(user).setHomeCity("Denver");
         verify(user).setCountry("US");
-        verify(user).setCustomUserAttribute("Zip", "80202");
+        verify(user).setCustomUserAttribute("postalCode", "80202");
+        verify(user).setCustomUserAttribute("state", "CO");
         verify(user).setEmailNotificationSubscriptionType(NotificationSubscriptionType.OPTED_IN);
         verify(user).setPushNotificationSubscriptionType(NotificationSubscriptionType.UNSUBSCRIBED);
         verify(user, never()).setCustomUserAttribute(eq("userId"), anyString());
         verify(user, never()).setCustomUserAttribute(eq("anonymousId"), anyString());
         verify(user, never()).setCustomUserAttribute(eq("address"), anyString());
+        verify(user, never()).setCustomUserAttribute(eq("city"), anyString());
     }
 
     @Test
-    public void mParticleAliasesAndInvalidValues() {
+    public void otherTraitNamesAreCustomAttributesAndInvalidValuesAreDropped() {
         integration()
                 .identify(
                         identify(
                                 null,
                                 new ValueMap()
                                         .putValue("$FirstName", "Ada")
-                                        .putValue("$City", "Boulder")
-                                        .putValue("$Country", "CA")
-                                        .putValue("$Zip", "12345")
-                                        .putValue("$Age", 30)
-                                        .putValue("$Gender", "robot")
+                                        .putValue("Email", "ada@example.com")
+                                        .putValue("age", 30)
+                                        .putValue("gender", "robot")
                                         .putValue("dob", "not a date")
                                         .putValue("email_subscribe", "maybe")));
 
-        verify(user).setFirstName("Ada");
-        verify(user).setHomeCity("Boulder");
-        verify(user).setCountry("CA");
-        verify(user).setCustomUserAttribute("Zip", "12345");
-        verify(user)
-                .setDateOfBirth(Calendar.getInstance().get(Calendar.YEAR) - 30, Month.JANUARY, 1);
+        verify(user).setCustomUserAttribute("$FirstName", "Ada");
+        verify(user).setCustomUserAttribute("Email", "ada@example.com");
+        verify(user).setCustomUserAttribute("age", 30);
+        verify(user, never()).setFirstName(anyString());
+        verify(user, never()).setEmail(anyString());
+        verify(user, never()).setDateOfBirth(anyInt(), any(), anyInt());
         verify(user, never()).setGender(any());
         verify(user, never()).setEmailNotificationSubscriptionType(any());
         verify(braze, never()).changeUser(anyString());
+    }
+
+    @Test
+    public void genderSpellings() {
+        BrazeIntegration integration = integration();
+        Object[][] cases = {
+            {"M", Gender.MALE},
+            {"female", Gender.FEMALE},
+            {"Other", Gender.OTHER},
+            {"u", Gender.UNKNOWN},
+            {"Not Applicable", Gender.NOT_APPLICABLE},
+            {"prefer not to say", Gender.PREFER_NOT_TO_SAY},
+        };
+        for (Object[] c : cases) {
+            integration.identify(identify(null, new ValueMap().putValue("gender", c[0])));
+            verify(user).setGender((Gender) c[1]);
+        }
     }
 
     @Test
@@ -249,7 +268,7 @@ public class BrazeIntegrationTest {
                                         .putValue("removed", null)
                                         .putValue("unsupported", new Object())));
 
-        verify(user).setCustomUserAttribute("plan", "gold");
+        verify(user).setCustomUserAttribute("$$plan", "gold");
         verify(user).setCustomUserAttribute("visits", 3);
         verify(user).setCustomUserAttribute("lifetime", 12L);
         verify(user).setCustomUserAttribute("score", 9.5);
@@ -307,13 +326,16 @@ public class BrazeIntegrationTest {
                                 "$Workout Started",
                                 new ValueMap()
                                         .putValue("$class", "Spin")
+                                        .putValue("class", "Spin")
                                         .putValue("minutes", 45)
                                         .putValue("coach", new ValueMap().putValue("id", 7))
                                         .putValue("tags", Arrays.asList("a", "b"))));
 
         ArgumentCaptor<BrazeProperties> captor = ArgumentCaptor.forClass(BrazeProperties.class);
-        verify(braze).logCustomEvent(eq("Workout Started"), captor.capture());
+        verify(braze).logCustomEvent(eq("$Workout Started"), captor.capture());
         JSONObject properties = json(captor.getValue());
+        // Braze's Android SDK drops property keys that start with `$`.
+        assertThat(properties.has("$class")).isFalse();
         assertThat(properties.opt("class")).isEqualTo("Spin");
         assertThat(properties.opt("minutes")).isEqualTo(45);
         assertThat(properties.optJSONObject("coach").opt("id")).isEqualTo(7);
@@ -336,7 +358,9 @@ public class BrazeIntegrationTest {
                                 .putValue("price", 12.5)
                                 .putValue("quantity", 2)
                                 .putValue("color", "blue"),
-                        new ValueMap().putValue("product_id", "p2").putValue("price", "3"));
+                        new ValueMap().putValue("product_id", "p2").putValue("price", "3"),
+                        new ValueMap().putValue("name", "Mat"),
+                        new ValueMap().putValue("price", 1));
         integration()
                 .track(
                         track(
@@ -345,26 +369,31 @@ public class BrazeIntegrationTest {
                                         .putValue("order_id", "o-1")
                                         .putValue("revenue", 28)
                                         .putValue("currency", "EUR")
+                                        .putValue("coupon", "ORDER")
                                         .putValue("products", products)));
 
         JSONObject first = capturePurchase("SKU-1", "EUR", "12.5", 2);
-        assertThat(first.getString("Transaction Id")).isEqualTo("o-1");
         assertThat(first.getString("order_id")).isEqualTo("o-1");
-        assertThat(first.getString("Name")).isEqualTo("Towel");
-        assertThat(first.getString("Brand")).isEqualTo("Equinox");
-        assertThat(first.getString("Category")).isEqualTo("Gear");
-        assertThat(first.getString("Variant")).isEqualTo("Blue");
-        assertThat(first.getInt("Position")).isEqualTo(1);
-        assertThat(first.getString("Coupon Code")).isEqualTo("SAVE");
-        assertThat(first.getString("color")).isEqualTo("blue");
+        assertThat(first.getInt("revenue")).isEqualTo(28);
+        assertThat(first.getString("currency")).isEqualTo("EUR");
+        assertThat(first.getString("sku")).isEqualTo("SKU-1");
         assertThat(first.getString("product_id")).isEqualTo("p1");
-        assertThat(first.has("sku")).isFalse();
+        assertThat(first.getString("name")).isEqualTo("Towel");
+        assertThat(first.getString("brand")).isEqualTo("Equinox");
+        assertThat(first.getString("category")).isEqualTo("Gear");
+        assertThat(first.getString("variant")).isEqualTo("Blue");
+        assertThat(first.getInt("position")).isEqualTo(1);
+        assertThat(first.getString("coupon")).isEqualTo("SAVE");
+        assertThat(first.getString("color")).isEqualTo("blue");
         assertThat(first.has("price")).isFalse();
         assertThat(first.has("quantity")).isFalse();
-        assertThat(first.has("currency")).isFalse();
         assertThat(first.has("products")).isFalse();
+        assertThat(first.has("Transaction Id")).isFalse();
 
-        capturePurchase("p2", "EUR", "3.0", 1);
+        assertThat(capturePurchase("p2", "EUR", "3.0", 1).getString("coupon")).isEqualTo("ORDER");
+        capturePurchase("Mat", "EUR", "0.0", 1);
+        verify(braze, times(3))
+                .logPurchase(anyString(), anyString(), any(), anyInt(), any(BrazeProperties.class));
         verify(braze, never()).logCustomEvent(anyString(), any());
     }
 
@@ -388,14 +417,23 @@ public class BrazeIntegrationTest {
     }
 
     @Test
-    public void orderWithoutProductsLogsSinglePurchase() {
-        integration().track(track("Order Completed", new ValueMap().putValue("total", 20)));
+    public void orderWithoutProductsLogsSinglePurchase() throws Exception {
+        integration()
+                .track(
+                        track(
+                                "Order Completed",
+                                new ValueMap()
+                                        .putValue("order_id", "o-1")
+                                        .putValue("total", 20)
+                                        .putValue("products", Collections.emptyList())));
 
-        capturePurchase("Order Completed", "USD", "20.0", 1);
+        JSONObject properties = capturePurchase("Order Completed", "USD", "20.0", 1);
+        assertThat(properties.getString("order_id")).isEqualTo("o-1");
+        assertThat(properties.getInt("total")).isEqualTo(20);
     }
 
     @Test
-    public void bundleCommerceEvents() throws Exception {
+    public void bundleCommerceEventsLogsOnePurchasePerOrder() throws Exception {
         options.bundleCommerceEvents(true);
         integration()
                 .track(
@@ -416,28 +454,19 @@ public class BrazeIntegrationTest {
                                                                 .putValue("sku", "SKU-2")
                                                                 .putValue("price", 5)))));
 
-        JSONObject properties = capturePurchase("eCommerce - purchase", "USD", "25.0", 1);
-        assertThat(properties.getString("Transaction Id")).isEqualTo("o-1");
+        JSONObject properties = capturePurchase("Order Completed", "USD", "25.0", 1);
+        assertThat(properties.getString("order_id")).isEqualTo("o-1");
+        assertThat(properties.getInt("revenue")).isEqualTo(25);
         JSONArray products = properties.getJSONArray("products");
         assertThat(products.length()).isEqualTo(2);
         JSONObject first = products.getJSONObject(0);
-        assertThat(first.getString("Id")).isEqualTo("SKU-1");
-        assertThat(first.getString("Coupon Code")).isEqualTo("SAVE");
-        assertThat(first.getDouble("Total Product Amount")).isEqualTo(20.0);
-        assertThat(first.has("sku")).isFalse();
-        assertThat(products.getJSONObject(1).getDouble("Total Product Amount")).isEqualTo(5.0);
-    }
-
-    @Test
-    public void logPurchaseWhenRevenuePresent() {
-        integration().track(track("Upgraded", new ValueMap().putValue("revenue", 9.99)));
-        verify(braze).logCustomEvent(eq("Upgraded"), any());
-
-        options.logPurchaseWhenRevenuePresent(true);
-        integration().track(track("Upgraded", new ValueMap().putValue("revenue", "9.99")));
-        integration().track(track("Browsed", new ValueMap().putValue("revenue", 0)));
-        capturePurchase("Upgraded", "USD", "9.99", 1);
-        verify(braze).logCustomEvent(eq("Browsed"), any());
+        assertThat(first.getString("sku")).isEqualTo("SKU-1");
+        assertThat(first.getString("coupon")).isEqualTo("SAVE");
+        assertThat(first.getInt("price")).isEqualTo(10);
+        assertThat(first.getInt("quantity")).isEqualTo(2);
+        assertThat(first.has("Id")).isFalse();
+        assertThat(first.has("Total Product Amount")).isFalse();
+        assertThat(properties.has("Transaction Id")).isFalse();
     }
 
     @Test
@@ -445,10 +474,12 @@ public class BrazeIntegrationTest {
         integration().track(track("Order Completed", new ValueMap().putValue("total", 5)));
         integration().track(track("Completed Order", new ValueMap().putValue("total", 5)));
         integration().track(track("order completed", new ValueMap().putValue("total", 5)));
+        integration().track(track("Upgraded", new ValueMap().putValue("revenue", 9.99)));
 
         capturePurchase("Order Completed", "USD", "5.0", 1);
         capturePurchase("Completed Order", "USD", "5.0", 1);
         verify(braze).logCustomEvent(eq("order completed"), any());
+        verify(braze).logCustomEvent(eq("Upgraded"), any());
     }
 
     @Test
@@ -462,9 +493,8 @@ public class BrazeIntegrationTest {
     }
 
     @Test
-    public void purchaseEventMatcherOverridesNamesAndRevenue() {
+    public void purchaseEventMatcherOverridesNames() {
         options.purchaseEventNames("Membership Purchased")
-                .logPurchaseWhenRevenuePresent(true)
                 .purchaseEventMatcher(track -> "Upgraded".equals(track.event()));
         integration().track(track("Upgraded", new ValueMap().putValue("total", 5)));
         integration().track(track("Membership Purchased", new ValueMap().putValue("revenue", 5)));
@@ -490,6 +520,86 @@ public class BrazeIntegrationTest {
         verify(braze).logCustomEvent(eq("Order Completed"), any());
         verify(braze, never())
                 .logPurchase(anyString(), anyString(), any(), anyInt(), any(BrazeProperties.class));
+    }
+
+    private static TrackPayload order(ValueMap... products) {
+        return track(
+                "Order Completed",
+                new ValueMap()
+                        .putValue("order_id", "o-1")
+                        .putValue("revenue", 25)
+                        .putValue("products", Arrays.asList(products)));
+    }
+
+    @Test
+    public void purchaseTransformerModifiesPurchases() throws Exception {
+        List<BrazeIntegration.PurchaseContext> contexts = new ArrayList<>();
+        options.purchaseTransformer(
+                (purchase, context) -> {
+                    contexts.add(context);
+                    return purchase.withProductId("X-" + purchase.productId())
+                            .withPrice(new BigDecimal("9.5"))
+                            .withCurrency("EUR")
+                            .withQuantity(3)
+                            .withProperties(
+                                    Collections.singletonMap(
+                                            "Transaction Id", context.order().get("order_id")));
+                });
+        TrackPayload track = order(new ValueMap().putValue("sku", "SKU-1").putValue("price", 10));
+        integration().track(track);
+
+        JSONObject properties = capturePurchase("X-SKU-1", "EUR", "9.5", 3);
+        assertThat(properties.getString("Transaction Id")).isEqualTo("o-1");
+        assertThat(properties.length()).isEqualTo(1);
+        assertThat(contexts).hasSize(1);
+        assertThat(contexts.get(0).event()).isSameAs(track);
+        assertThat(contexts.get(0).order()).containsKey("products");
+        assertThat(contexts.get(0).product()).containsEntry("sku", "SKU-1");
+
+        options.bundleCommerceEvents(true);
+        integration().track(track);
+        capturePurchase("X-Order Completed", "EUR", "9.5", 3);
+        assertThat(contexts.get(1).product()).isNull();
+    }
+
+    @Test
+    public void purchaseTransformerSkipsNullAndInvalidResults() {
+        options.purchaseTransformer(
+                (purchase, context) -> {
+                    if ("SKU-1".equals(purchase.productId())) {
+                        return null;
+                    }
+                    if ("SKU-2".equals(purchase.productId())) {
+                        return purchase.withProductId("");
+                    }
+                    return purchase;
+                });
+        integration()
+                .track(
+                        order(
+                                new ValueMap().putValue("sku", "SKU-1"),
+                                new ValueMap().putValue("sku", "SKU-2"),
+                                new ValueMap().putValue("sku", "SKU-3")));
+
+        capturePurchase("SKU-3", "USD", "0.0", 1);
+        verify(braze, times(1))
+                .logPurchase(anyString(), anyString(), any(), anyInt(), any(BrazeProperties.class));
+    }
+
+    @Test
+    public void purchaseTransformerErrorLogsDefaultPurchase() throws Exception {
+        RuntimeException error = new RuntimeException("boom");
+        options.purchaseTransformer(
+                (purchase, context) -> {
+                    throw error;
+                });
+        Logger logger = mock(Logger.class);
+        new BrazeIntegration(braze, options, preferences, logger)
+                .track(order(new ValueMap().putValue("sku", "SKU-1").putValue("price", 10)));
+
+        verify(logger).error(eq(error), anyString(), any());
+        assertThat(capturePurchase("SKU-1", "USD", "10.0", 1).getString("order_id"))
+                .isEqualTo("o-1");
     }
 
     @Test

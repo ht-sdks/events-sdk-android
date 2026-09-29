@@ -7,6 +7,7 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.braze.Braze;
 import com.braze.BrazeUser;
@@ -49,9 +50,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Forwards Hightouch events to the Braze Android SDK, following the mapping of mParticle's Braze
- * kit. The integration only sends data; use the Braze instance from {@link Factory#getBraze()} (or
- * {@link Analytics#onIntegrationReady}) for in-app message and Content Card UI.
+ * Forwards Hightouch events to the Braze Android SDK. The integration only sends data; use the
+ * Braze instance from {@link Factory#getBraze()} (or {@link Analytics#onIntegrationReady}) for
+ * in-app message and Content Card UI.
  *
  * <pre><code>
  * BrazeIntegration.Factory braze =
@@ -75,23 +76,122 @@ public class BrazeIntegration extends Integration<Braze> {
         boolean isPurchaseEvent(@NonNull TrackPayload track);
     }
 
+    /**
+     * Changes or skips each purchase before it's logged. Return {@code null} to skip the purchase.
+     * If it throws, the default purchase is logged.
+     */
+    public interface PurchaseTransformer {
+        @Nullable
+        BrazePurchase transform(@NonNull BrazePurchase purchase, @NonNull PurchaseContext context);
+    }
+
+    /** A purchase about to be passed to {@code Braze.logPurchase}. */
+    public static final class BrazePurchase {
+        private final String productId;
+        private final BigDecimal price;
+        private final String currency;
+        private final int quantity;
+        private final Map<String, Object> properties;
+
+        BrazePurchase(
+                String productId,
+                BigDecimal price,
+                String currency,
+                int quantity,
+                Map<String, ?> properties) {
+            this.productId = productId;
+            this.price = price;
+            this.currency = currency;
+            this.quantity = quantity;
+            this.properties =
+                    Collections.unmodifiableMap(
+                            properties == null
+                                    ? new LinkedHashMap<String, Object>()
+                                    : new LinkedHashMap<String, Object>(properties));
+        }
+
+        public String productId() {
+            return productId;
+        }
+
+        public BigDecimal price() {
+            return price;
+        }
+
+        public String currency() {
+            return currency;
+        }
+
+        public int quantity() {
+            return quantity;
+        }
+
+        @NonNull
+        public Map<String, Object> properties() {
+            return properties;
+        }
+
+        @NonNull
+        public BrazePurchase withProductId(String productId) {
+            return new BrazePurchase(productId, price, currency, quantity, properties);
+        }
+
+        @NonNull
+        public BrazePurchase withPrice(BigDecimal price) {
+            return new BrazePurchase(productId, price, currency, quantity, properties);
+        }
+
+        @NonNull
+        public BrazePurchase withCurrency(String currency) {
+            return new BrazePurchase(productId, price, currency, quantity, properties);
+        }
+
+        @NonNull
+        public BrazePurchase withQuantity(int quantity) {
+            return new BrazePurchase(productId, price, currency, quantity, properties);
+        }
+
+        @NonNull
+        public BrazePurchase withProperties(Map<String, ?> properties) {
+            return new BrazePurchase(productId, price, currency, quantity, properties);
+        }
+    }
+
+    /** What a {@link BrazePurchase} was mapped from. */
+    public static final class PurchaseContext {
+        private final TrackPayload event;
+        private final Map<String, Object> order;
+        private final Map<String, Object> product;
+
+        PurchaseContext(
+                TrackPayload event, Map<String, Object> order, Map<String, Object> product) {
+            this.event = event;
+            this.order = Collections.unmodifiableMap(order);
+            this.product = product == null ? null : Collections.unmodifiableMap(product);
+        }
+
+        @NonNull
+        public TrackPayload event() {
+            return event;
+        }
+
+        /** The event's properties. */
+        @NonNull
+        public Map<String, Object> order() {
+            return order;
+        }
+
+        /** The product this purchase came from, or {@code null} for a purchase per order. */
+        @Nullable
+        public Map<String, Object> product() {
+            return product;
+        }
+    }
+
     static final String PREFERENCES_NAME = "hightouch-braze";
     private static final String USER_ID_PREFERENCE = "userId";
     private static final String ATTRIBUTES_PREFERENCE = "attributes";
-    private static final String BUNDLED_PURCHASE_PRODUCT_ID = "eCommerce - purchase";
     private static final Pattern DATE_ONLY = Pattern.compile("(\\d{4})-(\\d{2})-(\\d{2})");
-    private static final Set<String> MAPPED_PRODUCT_FIELDS =
-            new HashSet<>(
-                    Arrays.asList(
-                            "sku",
-                            "name",
-                            "brand",
-                            "category",
-                            "variant",
-                            "position",
-                            "coupon",
-                            "price",
-                            "quantity"));
     private static final Object ABSENT = new Object();
     private static final Object UNSUPPORTED = new Object();
 
@@ -124,7 +224,7 @@ public class BrazeIntegration extends Integration<Braze> {
         Set<String> purchaseEventNames =
                 new HashSet<>(Arrays.asList("Order Completed", "Completed Order"));
         PurchaseEventMatcher purchaseEventMatcher;
-        boolean logPurchaseWhenRevenuePresent;
+        PurchaseTransformer purchaseTransformer;
         boolean stringifyAttributeValues;
 
         Builder(Context context, BrazeConfig config, Braze braze) {
@@ -148,13 +248,16 @@ public class BrazeIntegration extends Integration<Braze> {
             return this;
         }
 
-        /** Which product field becomes the purchase {@code productId}. Defaults to SKU. */
+        /**
+         * Which product field becomes the purchase {@code productId}. Defaults to SKU, which falls
+         * back to {@code product_id} and then {@code name}.
+         */
         public Builder purchaseProductIdentifier(@NonNull ProductIdentifier identifier) {
             this.purchaseProductIdentifier = identifier;
             return this;
         }
 
-        /** Log one {@code eCommerce - purchase} per order instead of one purchase per product. */
+        /** Log one purchase per order, named after the event, instead of one per product. */
         public Builder bundleCommerceEvents(boolean bundleCommerceEvents) {
             this.bundleCommerceEvents = bundleCommerceEvents;
             return this;
@@ -177,17 +280,16 @@ public class BrazeIntegration extends Integration<Braze> {
 
         /**
          * Decide which {@code track} calls are purchases yourself. When set, this overrides {@link
-         * #purchaseEventNames} and {@link #logPurchaseWhenRevenuePresent}. If it throws, the event
-         * is logged as a custom event.
+         * #purchaseEventNames}. If it throws, the event is logged as a custom event.
          */
         public Builder purchaseEventMatcher(@NonNull PurchaseEventMatcher matcher) {
             this.purchaseEventMatcher = matcher;
             return this;
         }
 
-        /** Log any {@code track} call with a non-zero {@code revenue} as a purchase. */
-        public Builder logPurchaseWhenRevenuePresent(boolean logPurchaseWhenRevenuePresent) {
-            this.logPurchaseWhenRevenuePresent = logPurchaseWhenRevenuePresent;
+        /** Change or skip each purchase after the default mapping, before it's logged. */
+        public Builder purchaseTransformer(@NonNull PurchaseTransformer transformer) {
+            this.purchaseTransformer = transformer;
             return this;
         }
 
@@ -256,7 +358,7 @@ public class BrazeIntegration extends Integration<Braze> {
     private final boolean forwardScreenViews;
     private final Set<String> purchaseEventNames;
     private final PurchaseEventMatcher purchaseEventMatcher;
-    private final boolean logPurchaseWhenRevenuePresent;
+    private final PurchaseTransformer purchaseTransformer;
     private final boolean stringifyAttributeValues;
 
     BrazeIntegration(Braze braze, Builder options, SharedPreferences preferences, Logger logger) {
@@ -268,7 +370,7 @@ public class BrazeIntegration extends Integration<Braze> {
         this.forwardScreenViews = options.forwardScreenViews;
         this.purchaseEventNames = options.purchaseEventNames;
         this.purchaseEventMatcher = options.purchaseEventMatcher;
-        this.logPurchaseWhenRevenuePresent = options.logPurchaseWhenRevenuePresent;
+        this.purchaseTransformer = options.purchaseTransformer;
         this.stringifyAttributeValues = options.stringifyAttributeValues;
     }
 
@@ -308,13 +410,13 @@ public class BrazeIntegration extends Integration<Braze> {
     @Override
     public void track(TrackPayload track) {
         try {
-            String event = stripDollars(track.event());
+            String event = track.event();
             Properties properties = track.properties();
             if ("Install Attributed".equals(event) && properties.get("campaign") != null) {
                 setAttributionData(properties.get("campaign"));
             }
-            if (isPurchase(track, properties)) {
-                logPurchase(event, properties);
+            if (isPurchase(track)) {
+                logPurchases(track, properties);
             } else {
                 braze.logCustomEvent(event, brazeProperties(properties));
             }
@@ -329,8 +431,7 @@ public class BrazeIntegration extends Integration<Braze> {
             return;
         }
         try {
-            braze.logCustomEvent(
-                    stripDollars(screen.event()), brazeProperties(screen.properties()));
+            braze.logCustomEvent(screen.event(), brazeProperties(screen.properties()));
         } catch (Exception e) {
             logger.error(e, "Unable to forward screen %s to Braze.", screen.event());
         }
@@ -413,41 +514,35 @@ public class BrazeIntegration extends Integration<Braze> {
         putString(
                 attributes,
                 "firstName",
-                find(traits, consumed, "firstName", "first_name", "$FirstName"),
+                find(traits, consumed, "firstName", "first_name"),
                 BrazeUser::setFirstName);
         putString(
                 attributes,
                 "lastName",
-                find(traits, consumed, "lastName", "last_name", "$LastName"),
+                find(traits, consumed, "lastName", "last_name"),
                 BrazeUser::setLastName);
-        putString(
-                attributes, "email", find(traits, consumed, "email", "Email"), BrazeUser::setEmail);
-        putString(
-                attributes,
-                "phone",
-                find(traits, consumed, "phone", "$Mobile"),
-                BrazeUser::setPhoneNumber);
-        Object city = find(traits, consumed, "home_city", "$City");
+        putString(attributes, "email", find(traits, consumed, "email"), BrazeUser::setEmail);
+        putString(attributes, "phone", find(traits, consumed, "phone"), BrazeUser::setPhoneNumber);
+        Object city = find(traits, consumed, "home_city");
         putString(
                 attributes,
                 "homeCity",
                 address.containsKey("city") ? address.get("city") : city,
                 BrazeUser::setHomeCity);
-        Object country = find(traits, consumed, "country", "$Country");
+        Object country = find(traits, consumed, "country");
         putString(
                 attributes,
                 "country",
                 address.containsKey("country") ? address.get("country") : country,
                 BrazeUser::setCountry);
-        Object zip = find(traits, consumed, "$Zip");
-        if (address.containsKey("postalCode")) {
-            zip = address.get("postalCode");
-        }
-        if (zip != ABSENT) {
-            putCustom(attributes, "Zip", zip);
+        for (Map.Entry<?, ?> field : address.entrySet()) {
+            String key = String.valueOf(field.getKey());
+            if (!"city".equals(key) && !"country".equals(key)) {
+                putCustom(attributes, key, field.getValue());
+            }
         }
 
-        Object gender = find(traits, consumed, "gender", "$Gender");
+        Object gender = find(traits, consumed, "gender");
         if (gender != ABSENT) {
             final Gender brazeGender = gender(gender);
             if (brazeGender == null) {
@@ -462,13 +557,6 @@ public class BrazeIntegration extends Integration<Braze> {
             }
         }
 
-        Object age = find(traits, consumed, "age", "$Age");
-        if (age instanceof Number) {
-            int year = Calendar.getInstance().get(Calendar.YEAR) - ((Number) age).intValue();
-            putDateOfBirth(attributes, "age", new int[] {year, Calendar.JANUARY, 1});
-        } else if (age != ABSENT) {
-            logger.info("Dropping non-numeric age %s.", age);
-        }
         Object birthday = find(traits, consumed, "birthday", "dob");
         if (birthday != ABSENT) {
             int[] date = dateParts(birthday);
@@ -492,7 +580,7 @@ public class BrazeIntegration extends Integration<Braze> {
 
         for (Map.Entry<String, Object> entry : traits.entrySet()) {
             if (!consumed.contains(entry.getKey())) {
-                putCustom(attributes, stripDollars(entry.getKey()), entry.getValue());
+                putCustom(attributes, entry.getKey(), entry.getValue());
             }
         }
         return attributes;
@@ -642,7 +730,7 @@ public class BrazeIntegration extends Integration<Braze> {
         updateUser(Collections.<UserUpdate>singletonList(user -> user.setAttributionData(data)));
     }
 
-    private boolean isPurchase(TrackPayload track, Properties properties) {
+    private boolean isPurchase(TrackPayload track) {
         if (purchaseEventMatcher != null) {
             try {
                 return purchaseEventMatcher.isPurchaseEvent(track);
@@ -651,54 +739,33 @@ public class BrazeIntegration extends Integration<Braze> {
                 return false;
             }
         }
-        return purchaseEventNames.contains(track.event())
-                || (logPurchaseWhenRevenuePresent && number(properties.get("revenue"), 0) != 0);
+        return purchaseEventNames.contains(track.event());
     }
 
-    private void logPurchase(String event, Properties properties) {
+    private void logPurchases(TrackPayload track, Properties properties) {
         Object currencyValue = properties.get("currency");
         String currency =
                 currencyValue instanceof String && ((String) currencyValue).length() == 3
                         ? (String) currencyValue
                         : "USD";
-        Map<String, Object> order = new LinkedHashMap<>(properties);
-        order.remove("products");
-        order.remove("currency");
-        Object orderId =
-                properties.containsKey("order_id")
-                        ? properties.get("order_id")
-                        : properties.get("orderId");
-        if (orderId != null) {
-            order.put("Transaction Id", orderId);
-        }
-        BigDecimal total =
-                BigDecimal.valueOf(
-                        number(
-                                properties.containsKey("revenue")
-                                        ? properties.get("revenue")
-                                        : properties.get("total"),
-                                0));
         List<Map<String, Object>> products = products(properties.get("products"));
 
-        if (bundleCommerceEvents) {
-            for (Map<String, Object> product : products) {
-                double amount =
-                        number(product.get("price"), 0) * number(product.get("quantity"), 1);
-                rename(product, "sku", "Id");
-                rename(product, "coupon", "Coupon Code");
-                product.put("Total Product Amount", amount);
-            }
-            order.put("products", products);
-            braze.logPurchase(
-                    BUNDLED_PURCHASE_PRODUCT_ID, currency, total, 1, brazeProperties(order));
+        if (bundleCommerceEvents || products.isEmpty()) {
+            BigDecimal total =
+                    BigDecimal.valueOf(
+                            number(
+                                    properties.containsKey("revenue")
+                                            ? properties.get("revenue")
+                                            : properties.get("total"),
+                                    0));
+            logPurchase(
+                    new BrazePurchase(track.event(), total, currency, 1, properties),
+                    new PurchaseContext(track, properties, null));
             return;
         }
 
-        if (products.isEmpty()) {
-            braze.logPurchase(event, currency, total, 1, brazeProperties(order));
-            return;
-        }
-
+        Map<String, Object> order = new LinkedHashMap<>(properties);
+        order.remove("products");
         for (Map<String, Object> product : products) {
             String productId = productId(product);
             if (productId == null) {
@@ -706,31 +773,51 @@ public class BrazeIntegration extends Integration<Braze> {
                 continue;
             }
             Map<String, Object> purchase = new LinkedHashMap<>(order);
-            putIfPresent(purchase, "Name", product.get("name"));
-            putIfPresent(purchase, "Brand", product.get("brand"));
-            putIfPresent(purchase, "Category", product.get("category"));
-            putIfPresent(purchase, "Variant", product.get("variant"));
-            putIfPresent(purchase, "Position", product.get("position"));
-            putIfPresent(purchase, "Coupon Code", product.get("coupon"));
-            for (Map.Entry<String, Object> field : product.entrySet()) {
-                if (!MAPPED_PRODUCT_FIELDS.contains(field.getKey())) {
-                    purchase.put(field.getKey(), field.getValue());
-                }
-            }
-            braze.logPurchase(
-                    productId,
-                    currency,
-                    BigDecimal.valueOf(number(product.get("price"), 0)),
-                    (int) number(product.get("quantity"), 1),
-                    brazeProperties(purchase));
+            purchase.putAll(product);
+            purchase.remove("price");
+            purchase.remove("quantity");
+            logPurchase(
+                    new BrazePurchase(
+                            productId,
+                            BigDecimal.valueOf(number(product.get("price"), 0)),
+                            currency,
+                            (int) number(product.get("quantity"), 1),
+                            purchase),
+                    new PurchaseContext(track, properties, product));
         }
     }
 
-    private String productId(Map<String, Object> product) {
-        List<String> keys = new ArrayList<>(Arrays.asList("sku", "product_id", "id"));
-        if (purchaseProductIdentifier == ProductIdentifier.NAME) {
-            keys.add(0, "name");
+    private void logPurchase(BrazePurchase purchase, PurchaseContext context) {
+        if (purchaseTransformer != null) {
+            try {
+                purchase = purchaseTransformer.transform(purchase, context);
+            } catch (Exception e) {
+                logger.error(
+                        e,
+                        "Purchase transformer failed for %s; logging the default purchase.",
+                        context.event().event());
+            }
+            if (purchase == null) {
+                return;
+            }
         }
+        if (Utils.isNullOrEmpty(purchase.productId())) {
+            logger.info("Dropping purchase without a product ID from %s.", context.event().event());
+            return;
+        }
+        braze.logPurchase(
+                purchase.productId(),
+                purchase.currency(),
+                purchase.price(),
+                purchase.quantity(),
+                brazeProperties(purchase.properties()));
+    }
+
+    private String productId(Map<String, Object> product) {
+        List<String> keys =
+                purchaseProductIdentifier == ProductIdentifier.NAME
+                        ? Collections.singletonList("name")
+                        : Arrays.asList("sku", "product_id", "name");
         for (String key : keys) {
             Object id = product.get(key);
             if (id != null && !String.valueOf(id).isEmpty()) {
@@ -759,7 +846,7 @@ public class BrazeIntegration extends Integration<Braze> {
     private BrazeProperties brazeProperties(Map<String, ?> properties) {
         BrazeProperties brazeProperties = new BrazeProperties();
         for (Map.Entry<String, ?> entry : properties.entrySet()) {
-            String key = stripDollars(entry.getKey());
+            String key = entry.getKey();
             Object value = propertyValue(entry.getValue());
             if (!key.isEmpty() && value != null) {
                 brazeProperties.addProperty(key, value);
@@ -847,9 +934,11 @@ public class BrazeIntegration extends Integration<Braze> {
                 return Gender.UNKNOWN;
             case "n":
             case "not_applicable":
+            case "not applicable":
                 return Gender.NOT_APPLICABLE;
             case "p":
             case "prefer_not_to_say":
+            case "prefer not to say":
                 return Gender.PREFER_NOT_TO_SAY;
             default:
                 return null;
@@ -905,29 +994,6 @@ public class BrazeIntegration extends Integration<Braze> {
 
     private static String string(Object value) {
         return value == null ? "" : String.valueOf(value);
-    }
-
-    private static void putIfPresent(Map<String, Object> map, String key, Object value) {
-        if (value != null) {
-            map.put(key, value);
-        }
-    }
-
-    private static void rename(Map<String, Object> map, String from, String to) {
-        if (map.containsKey(from)) {
-            map.put(to, map.remove(from));
-        }
-    }
-
-    private static String stripDollars(String value) {
-        if (value == null) {
-            return "";
-        }
-        int start = 0;
-        while (start < value.length() && value.charAt(start) == '$') {
-            start++;
-        }
-        return value.substring(start);
     }
 
     private static final class SessionTracker implements Application.ActivityLifecycleCallbacks {
