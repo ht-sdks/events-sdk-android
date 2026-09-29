@@ -313,7 +313,7 @@ public class BrazeIntegration extends Integration<Braze> {
             if ("Install Attributed".equals(event) && properties.get("campaign") != null) {
                 setAttributionData(properties.get("campaign"));
             }
-            if (isPurchase(track, event, properties)) {
+            if (isPurchase(track, properties)) {
                 logPurchase(event, properties);
             } else {
                 braze.logCustomEvent(event, brazeProperties(properties));
@@ -642,7 +642,7 @@ public class BrazeIntegration extends Integration<Braze> {
         updateUser(Collections.<UserUpdate>singletonList(user -> user.setAttributionData(data)));
     }
 
-    private boolean isPurchase(TrackPayload track, String event, Properties properties) {
+    private boolean isPurchase(TrackPayload track, Properties properties) {
         if (purchaseEventMatcher != null) {
             try {
                 return purchaseEventMatcher.isPurchaseEvent(track);
@@ -651,7 +651,7 @@ public class BrazeIntegration extends Integration<Braze> {
                 return false;
             }
         }
-        return purchaseEventNames.contains(event)
+        return purchaseEventNames.contains(track.event())
                 || (logPurchaseWhenRevenuePresent && number(properties.get("revenue"), 0) != 0);
     }
 
