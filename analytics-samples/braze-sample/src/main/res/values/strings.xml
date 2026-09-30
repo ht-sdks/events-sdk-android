@@ -11,5 +11,6 @@
     <string name="purchase_custom_name">Purchase, custom name</string>
     <string name="screen">Screen</string>
     <string name="opt_out_event">Opt-out event</string>
+    <string name="flush">Flush</string>
     <string name="reset">Reset</string>
 </resources>

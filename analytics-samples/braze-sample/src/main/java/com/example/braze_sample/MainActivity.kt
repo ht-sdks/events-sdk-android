@@ -100,6 +100,9 @@ class MainActivity : AppCompatActivity() {
                     )
             }
         }
+        binding.flush.setOnClickListener {
+            runAction(getString(R.string.flush)) { analytics().flush() }
+        }
         binding.reset.setOnClickListener {
             runAction(getString(R.string.reset)) { analytics().reset() }
         }
