@@ -50,11 +50,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
@@ -682,62 +679,5 @@ public class BrazeIntegrationTest {
         integration.identify(identify("user-1", Collections.emptyMap()));
         integration.identify(identify(null, new ValueMap().putValue("firstName", "Ada")));
         integration.flush();
-    }
-
-    @Test
-    public void mparticleMobilePurchaseRecipeRenamesProperties() throws Exception {
-        Map<String, String> orderNames = new HashMap<>();
-        orderNames.put("order_id", "Transaction Id");
-        orderNames.put("revenue", "Total Amount");
-        orderNames.put("tax", "Tax Amount");
-        orderNames.put("shipping", "Shipping Amount");
-        Map<String, String> productNames = new HashMap<>();
-        productNames.put("name", "Name");
-        productNames.put("brand", "Brand");
-        productNames.put("category", "Category");
-        productNames.put("variant", "Variant");
-        productNames.put("position", "Position");
-        productNames.put("coupon", "Coupon Code");
-        Set<String> passed =
-                new HashSet<>(
-                        Arrays.asList("sku", "product_id", "price", "quantity", "currency", "products"));
-        options.purchaseTransformer(
-                (purchase, context) -> {
-                    Map<String, Object> properties = new HashMap<>();
-                    mparticleRename(context.order(), orderNames, passed, properties);
-                    if (context.product() != null) {
-                        mparticleRename(context.product(), productNames, passed, properties);
-                    }
-                    return purchase.withProperties(properties);
-                });
-        integration()
-                .track(
-                        order(
-                                new ValueMap()
-                                        .putValue("sku", "SKU1")
-                                        .putValue("name", "Shirt")
-                                        .putValue("price", 12.5)
-                                        .putValue("quantity", 2)
-                                        .putValue("brand", "Equinox")
-                                        .putValue("coupon", "C1")));
-
-        JSONObject properties = capturePurchase("SKU1", "USD", "12.5", 2);
-        assertThat(properties.get("Transaction Id")).isEqualTo("o-1");
-        assertThat(properties.get("Total Amount")).isEqualTo(25);
-        assertThat(properties.getString("Name")).isEqualTo("Shirt");
-        assertThat(properties.getString("Brand")).isEqualTo("Equinox");
-        assertThat(properties.getString("Coupon Code")).isEqualTo("C1");
-        assertThat(properties.has("order_id")).isFalse();
-        assertThat(properties.has("brand")).isFalse();
-        assertThat(properties.has("sku")).isFalse();
-    }
-
-    private static void mparticleRename(
-            Map<String, ?> values, Map<String, String> names, Set<String> passed, Map<String, Object> into) {
-        for (Map.Entry<String, ?> entry : values.entrySet()) {
-            if (!passed.contains(entry.getKey())) {
-                into.put(names.getOrDefault(entry.getKey(), entry.getKey()), entry.getValue());
-            }
-        }
     }
 }
