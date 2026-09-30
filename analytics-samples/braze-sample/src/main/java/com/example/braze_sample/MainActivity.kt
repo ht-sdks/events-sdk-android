@@ -2,6 +2,7 @@ package com.example.braze_sample
 
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import java.util.UUID
 import com.example.braze_sample.databinding.ActivityMainBinding
 import com.hightouch.analytics.Analytics
 import com.hightouch.analytics.Options
@@ -10,26 +11,32 @@ import com.hightouch.analytics.Traits
 import com.hightouch.analytics.ValueMap
 
 class MainActivity : AppCompatActivity() {
+    private val names = listOf("Jane", "Bob", "Ada", "Maya", "Luis", "Priya", "Omar", "Chen")
     private lateinit var binding: ActivityMainBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        rollUser()
 
+        binding.newUser.setOnClickListener {
+            rollUser()
+            binding.lastAction.text = getString(R.string.new_user)
+        }
         binding.identifyA.setOnClickListener {
             runAction(getString(R.string.identify_a)) {
-                analytics().identify("user-a", userA("pro"), null)
+                analytics().identify(userId(), traits("pro"), null)
             }
         }
         binding.identifyAAgain.setOnClickListener {
             runAction(getString(R.string.identify_a_again)) {
-                analytics().identify("user-a", userA("pro"), null)
+                analytics().identify(userId(), traits("pro"), null)
             }
         }
         binding.changePlan.setOnClickListener {
             runAction(getString(R.string.change_plan)) {
-                analytics().identify("user-a", userA("enterprise"), null)
+                analytics().identify(userId(), traits("enterprise"), null)
             }
         }
         binding.customEvent.setOnClickListener {
@@ -96,22 +103,21 @@ class MainActivity : AppCompatActivity() {
         binding.reset.setOnClickListener {
             runAction(getString(R.string.reset)) { analytics().reset() }
         }
-        binding.identifyB.setOnClickListener {
-            runAction(getString(R.string.identify_b)) {
-                analytics()
-                    .identify(
-                        "user-b",
-                        Traits().putEmail("bob@example.com").putFirstName("Bob"),
-                        null,
-                    )
-            }
-        }
     }
 
-    private fun userA(plan: String): Traits {
+    private fun rollUser() {
+        binding.userId.setText(UUID.randomUUID().toString())
+        binding.firstName.setText(names.random())
+    }
+
+    private fun userId(): String = binding.userId.text.toString()
+
+    private fun traits(plan: String): Traits {
+        val firstName = binding.firstName.text.toString()
+        val email = firstName.trim().lowercase().replace("\\s+".toRegex(), "") + "@example.com"
         return Traits()
-            .putEmail("jane@example.com")
-            .putFirstName("Jane")
+            .putEmail(email)
+            .putFirstName(firstName)
             .putGender("male")
             .putValue("plan", plan)
             .putAddress(Traits.Address().putCity("New York").putCountry("US"))
