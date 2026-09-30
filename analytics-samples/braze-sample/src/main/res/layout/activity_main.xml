@@ -26,10 +26,35 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <EditText
+                android:id="@+id/user_id"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="User ID"
+                android:importantForAutofill="no"
+                android:inputType="text" />
+
+            <EditText
+                android:id="@+id/first_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="First name"
+                android:inputType="textPersonName" />
+
+            <Button
+                android:id="@+id/new_user"
+                style="@style/buttonStyle"
+                android:layout_width="match_parent"
+                android:layout_marginTop="8dp"
+                android:text="@string/new_user"
+                android:textAllCaps="false" />
+
             <Button
                 android:id="@+id/identify_a"
                 style="@style/buttonStyle"
                 android:layout_width="match_parent"
+                android:layout_marginTop="8dp"
                 android:text="@string/identify_a"
                 android:textAllCaps="false" />
 
@@ -97,13 +122,6 @@
                 android:text="@string/reset"
                 android:textAllCaps="false" />
 
-            <Button
-                android:id="@+id/identify_b"
-                style="@style/buttonStyle"
-                android:layout_width="match_parent"
-                android:layout_marginTop="8dp"
-                android:text="@string/identify_b"
-                android:textAllCaps="false" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>
