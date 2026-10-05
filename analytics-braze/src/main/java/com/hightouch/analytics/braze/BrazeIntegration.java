@@ -302,7 +302,6 @@ public class BrazeIntegration extends Integration<Braze> {
         PurchaseDetection purchaseDetection =
                 PurchaseDetection.eventNames("Order Completed", "Completed Order");
         PurchaseTransformer purchaseTransformer;
-        boolean stringifyAttributeValues;
 
         Builder(Context context, BrazeConfig config, Braze braze) {
             if (context == null) {
@@ -352,12 +351,6 @@ public class BrazeIntegration extends Integration<Braze> {
         /** Change or skip each purchase after the default mapping, before it's logged. */
         public Builder purchaseTransformer(@NonNull PurchaseTransformer transformer) {
             this.purchaseTransformer = transformer;
-            return this;
-        }
-
-        /** Send attribute and property values as strings. */
-        public Builder stringifyAttributeValues(boolean stringifyAttributeValues) {
-            this.stringifyAttributeValues = stringifyAttributeValues;
             return this;
         }
 
@@ -419,7 +412,6 @@ public class BrazeIntegration extends Integration<Braze> {
     private final boolean forwardScreenViews;
     private final PurchaseDetection purchaseDetection;
     private final PurchaseTransformer purchaseTransformer;
-    private final boolean stringifyAttributeValues;
 
     BrazeIntegration(Braze braze, Builder options, SharedPreferences preferences, Logger logger) {
         this.braze = braze;
@@ -429,7 +421,6 @@ public class BrazeIntegration extends Integration<Braze> {
         this.forwardScreenViews = options.forwardScreenViews;
         this.purchaseDetection = options.purchaseDetection;
         this.purchaseTransformer = options.purchaseTransformer;
-        this.stringifyAttributeValues = options.stringifyAttributeValues;
     }
 
     @Override
@@ -747,10 +738,10 @@ public class BrazeIntegration extends Integration<Braze> {
             return strings.toArray(new String[0]);
         }
         if (value instanceof Date) {
-            return stringifyAttributeValues ? Utils.toISO8601String((Date) value) : value;
+            return value;
         }
         if (value instanceof String || value instanceof Boolean || value instanceof Number) {
-            return stringifyAttributeValues ? String.valueOf(value) : scalar(value);
+            return scalar(value);
         }
         return UNSUPPORTED;
     }
@@ -909,15 +900,6 @@ public class BrazeIntegration extends Integration<Braze> {
     private Object propertyValue(Object value) {
         if (value instanceof Map || value instanceof Collection || value instanceof Object[]) {
             return toJson(value);
-        }
-        if (stringifyAttributeValues && value instanceof Date) {
-            return Utils.toISO8601String((Date) value);
-        }
-        if (stringifyAttributeValues
-                && (value instanceof String
-                        || value instanceof Number
-                        || value instanceof Boolean)) {
-            return String.valueOf(value);
         }
         return scalar(value);
     }

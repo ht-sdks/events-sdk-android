@@ -281,14 +281,13 @@ public class BrazeIntegrationTest {
     }
 
     @Test
-    public void stringifyAttributeValues() {
-        options.stringifyAttributeValues(true);
+    public void preservesExplicitStringValues() {
         integration()
                 .identify(
                         identify(
                                 "user-1",
-                                new ValueMap().putValue("visits", 3).putValue("vip", true)));
-        integration().track(track("Viewed", new ValueMap().putValue("count", 2)));
+                                new ValueMap().putValue("visits", "3").putValue("vip", "true")));
+        integration().track(track("Viewed", new ValueMap().putValue("count", "2")));
 
         verify(user).setCustomUserAttribute("visits", "3");
         verify(user).setCustomUserAttribute("vip", "true");
