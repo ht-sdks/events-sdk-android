@@ -6,6 +6,8 @@ import com.braze.BrazeActivityLifecycleCallbackListener
 import com.braze.support.BrazeLogger
 import com.hightouch.analytics.Analytics
 import com.hightouch.analytics.braze.BrazeIntegration
+import com.hightouch.analytics.braze.PurchaseDetection
+import com.hightouch.analytics.braze.PurchaseGrouping
 
 private const val HT_WRITE_KEY = "HT_WRITE_KEY"
 private const val BRAZE_API_KEY = "BRAZE_API_KEY"
@@ -24,7 +26,7 @@ class SampleApp : Application() {
             BrazeIntegration.builder(this, BRAZE_API_KEY, BRAZE_ENDPOINT)
                 .forwardScreenViews(true)
                 .purchaseDetection(
-                    BrazeIntegration.PurchaseDetection.eventNames(
+                    PurchaseDetection.eventNames(
                         "Order Completed",
                         "Completed Order",
                         "Membership Purchased",
@@ -32,7 +34,7 @@ class SampleApp : Application() {
                 )
                 .apply {
                     if (perOrder) {
-                        purchaseGrouping(BrazeIntegration.PurchaseGrouping.perOrder())
+                        purchaseGrouping(PurchaseGrouping.perOrder())
                     }
                 }
                 .build()
