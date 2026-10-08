@@ -7,21 +7,17 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 import com.braze.Braze;
 import com.braze.BrazeUser;
 import com.braze.configuration.BrazeConfig;
-import com.braze.enums.Gender;
-import com.braze.enums.Month;
-import com.braze.enums.NotificationSubscriptionType;
 import com.braze.events.IValueCallback;
 import com.braze.models.outgoing.AttributionData;
-import com.braze.models.outgoing.BrazeProperties;
 import com.hightouch.analytics.Analytics;
 import com.hightouch.analytics.Properties;
-import com.hightouch.analytics.Traits;
 import com.hightouch.analytics.ValueMap;
+import com.hightouch.analytics.braze.BrazeMapping.Attribute;
+import com.hightouch.analytics.braze.BrazeMapping.UserUpdate;
 import com.hightouch.analytics.integrations.IdentifyPayload;
 import com.hightouch.analytics.integrations.Integration;
 import com.hightouch.analytics.integrations.Logger;
@@ -29,25 +25,13 @@ import com.hightouch.analytics.integrations.ScreenPayload;
 import com.hightouch.analytics.integrations.TrackPayload;
 import com.hightouch.analytics.internal.Utils;
 
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Calendar;
-import java.util.Collection;
 import java.util.Collections;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Forwards Hightouch events to the Braze Android SDK. The integration only sends data; use the
@@ -65,214 +49,9 @@ public class BrazeIntegration extends Integration<Braze> {
     /** The integration key, also used for per-event opt-out in {@code Options}. */
     public static final String KEY = "Appboy";
 
-    /** Which product field becomes the {@code productId} of a Braze purchase. */
-    public enum ProductIdentifier {
-        SKU,
-        NAME
-    }
-
-    /** Decides whether a {@code track} call is logged as a Braze purchase. */
-    public interface PurchaseEventMatcher {
-        boolean isPurchaseEvent(@NonNull TrackPayload track);
-    }
-
-    /** Which {@code track} calls are logged as Braze purchases. */
-    public abstract static class PurchaseDetection {
-        private PurchaseDetection() {}
-
-        /** {@code track} event names (exact, case-sensitive) logged as purchases. */
-        @NonNull
-        public static PurchaseDetection eventNames(@NonNull String... names) {
-            return new EventNames(new HashSet<>(Arrays.asList(names)));
-        }
-
-        /**
-         * Decide which {@code track} calls are purchases yourself. If it throws, the event is
-         * logged as a custom event.
-         */
-        @NonNull
-        public static PurchaseDetection matcher(@NonNull PurchaseEventMatcher matcher) {
-            return new Custom(matcher);
-        }
-
-        abstract boolean isPurchaseEvent(TrackPayload track);
-
-        private static final class EventNames extends PurchaseDetection {
-            private final Set<String> names;
-
-            EventNames(Set<String> names) {
-                this.names = names;
-            }
-
-            @Override
-            boolean isPurchaseEvent(TrackPayload track) {
-                return names.contains(track.event());
-            }
-        }
-
-        private static final class Custom extends PurchaseDetection {
-            private final PurchaseEventMatcher matcher;
-
-            Custom(PurchaseEventMatcher matcher) {
-                this.matcher = matcher;
-            }
-
-            @Override
-            boolean isPurchaseEvent(TrackPayload track) {
-                return matcher.isPurchaseEvent(track);
-            }
-        }
-    }
-
-    /** Whether a purchase event logs one Braze purchase per product or one per order. */
-    public abstract static class PurchaseGrouping {
-        private PurchaseGrouping() {}
-
-        /**
-         * One purchase per product, with {@code identifier} as the {@code productId}. SKU falls
-         * back to {@code product_id} and then {@code name}. An order without products logs one
-         * purchase named after the event.
-         */
-        @NonNull
-        public static PurchaseGrouping perProduct(@NonNull ProductIdentifier identifier) {
-            return new PerProduct(identifier);
-        }
-
-        /** One purchase per order, named after the event. */
-        @NonNull
-        public static PurchaseGrouping perOrder() {
-            return new PerOrder();
-        }
-
-        private static final class PerProduct extends PurchaseGrouping {
-            final ProductIdentifier identifier;
-
-            PerProduct(ProductIdentifier identifier) {
-                this.identifier = identifier;
-            }
-        }
-
-        private static final class PerOrder extends PurchaseGrouping {}
-    }
-
-    /**
-     * Changes or skips each purchase before it's logged. Return {@code null} to skip the purchase.
-     * If it throws, the default purchase is logged.
-     */
-    public interface PurchaseTransformer {
-        @Nullable
-        BrazePurchase transform(@NonNull BrazePurchase purchase, @NonNull PurchaseContext context);
-    }
-
-    /** A purchase about to be passed to {@code Braze.logPurchase}. */
-    public static final class BrazePurchase {
-        private final String productId;
-        private final BigDecimal price;
-        private final String currency;
-        private final int quantity;
-        private final Map<String, Object> properties;
-
-        BrazePurchase(
-                String productId,
-                BigDecimal price,
-                String currency,
-                int quantity,
-                Map<String, ?> properties) {
-            this.productId = productId;
-            this.price = price;
-            this.currency = currency;
-            this.quantity = quantity;
-            this.properties =
-                    Collections.unmodifiableMap(
-                            properties == null
-                                    ? new LinkedHashMap<String, Object>()
-                                    : new LinkedHashMap<String, Object>(properties));
-        }
-
-        public String productId() {
-            return productId;
-        }
-
-        public BigDecimal price() {
-            return price;
-        }
-
-        public String currency() {
-            return currency;
-        }
-
-        public int quantity() {
-            return quantity;
-        }
-
-        @NonNull
-        public Map<String, Object> properties() {
-            return properties;
-        }
-
-        @NonNull
-        public BrazePurchase withProductId(String productId) {
-            return new BrazePurchase(productId, price, currency, quantity, properties);
-        }
-
-        @NonNull
-        public BrazePurchase withPrice(BigDecimal price) {
-            return new BrazePurchase(productId, price, currency, quantity, properties);
-        }
-
-        @NonNull
-        public BrazePurchase withCurrency(String currency) {
-            return new BrazePurchase(productId, price, currency, quantity, properties);
-        }
-
-        @NonNull
-        public BrazePurchase withQuantity(int quantity) {
-            return new BrazePurchase(productId, price, currency, quantity, properties);
-        }
-
-        @NonNull
-        public BrazePurchase withProperties(Map<String, ?> properties) {
-            return new BrazePurchase(productId, price, currency, quantity, properties);
-        }
-    }
-
-    /** What a {@link BrazePurchase} was mapped from. */
-    public static final class PurchaseContext {
-        private final TrackPayload event;
-        private final Map<String, Object> order;
-        private final Map<String, Object> product;
-
-        PurchaseContext(
-                TrackPayload event, Map<String, Object> order, Map<String, Object> product) {
-            this.event = event;
-            this.order = Collections.unmodifiableMap(order);
-            this.product = product == null ? null : Collections.unmodifiableMap(product);
-        }
-
-        @NonNull
-        public TrackPayload event() {
-            return event;
-        }
-
-        /** The event's properties. */
-        @NonNull
-        public Map<String, Object> order() {
-            return order;
-        }
-
-        /** The product this purchase came from, or {@code null} for a purchase per order. */
-        @Nullable
-        public Map<String, Object> product() {
-            return product;
-        }
-    }
-
     static final String PREFERENCES_NAME = "hightouch-braze";
     private static final String USER_ID_PREFERENCE = "userId";
     private static final String ATTRIBUTES_PREFERENCE = "attributes";
-    private static final Pattern DATE_ONLY = Pattern.compile("(\\d{4})-(\\d{2})-(\\d{2})");
-    private static final Object ABSENT = new Object();
-    private static final Object UNSUPPORTED = new Object();
 
     /** Configures Braze with an API key and SDK endpoint when the factory is built. */
     public static Builder builder(
@@ -408,19 +187,15 @@ public class BrazeIntegration extends Integration<Braze> {
     private final Braze braze;
     private final SharedPreferences preferences;
     private final Logger logger;
-    private final PurchaseGrouping purchaseGrouping;
     private final boolean forwardScreenViews;
-    private final PurchaseDetection purchaseDetection;
-    private final PurchaseTransformer purchaseTransformer;
+    private final BrazeMapping mapping;
 
     BrazeIntegration(Braze braze, Builder options, SharedPreferences preferences, Logger logger) {
         this.braze = braze;
         this.preferences = preferences;
         this.logger = logger;
-        this.purchaseGrouping = options.purchaseGrouping;
         this.forwardScreenViews = options.forwardScreenViews;
-        this.purchaseDetection = options.purchaseDetection;
-        this.purchaseTransformer = options.purchaseTransformer;
+        this.mapping = new BrazeMapping(braze, options, logger);
     }
 
     @Override
@@ -440,7 +215,7 @@ public class BrazeIntegration extends Integration<Braze> {
 
             JSONObject sent = sentAttributes();
             List<UserUpdate> updates = new ArrayList<>();
-            for (Map.Entry<String, Attribute> entry : attributes(identify.traits()).entrySet()) {
+            for (Map.Entry<String, Attribute> entry : mapping.attributes(identify.traits()).entrySet()) {
                 String signature = entry.getValue().signature;
                 if (!signature.equals(sent.optString(entry.getKey(), null))) {
                     updates.add(entry.getValue().update);
@@ -464,10 +239,10 @@ public class BrazeIntegration extends Integration<Braze> {
             if ("Install Attributed".equals(event) && properties.get("campaign") != null) {
                 setAttributionData(properties.get("campaign"));
             }
-            if (isPurchase(track)) {
-                logPurchases(track, properties);
+            if (mapping.isPurchase(track)) {
+                mapping.logPurchases(track, properties);
             } else {
-                braze.logCustomEvent(event, brazeProperties(properties));
+                braze.logCustomEvent(event, mapping.brazeProperties(properties));
             }
         } catch (Exception e) {
             logger.error(e, "Unable to forward track %s to Braze.", track.event());
@@ -480,7 +255,7 @@ public class BrazeIntegration extends Integration<Braze> {
             return;
         }
         try {
-            braze.logCustomEvent(screen.event(), brazeProperties(screen.properties()));
+            braze.logCustomEvent(screen.event(), mapping.brazeProperties(screen.properties()));
         } catch (Exception e) {
             logger.error(e, "Unable to forward screen %s to Braze.", screen.event());
         }
@@ -498,24 +273,6 @@ public class BrazeIntegration extends Integration<Braze> {
     @Override
     public void reset() {
         preferences.edit().clear().apply();
-    }
-
-    private interface UserUpdate {
-        void apply(BrazeUser user);
-    }
-
-    private interface Setter<T> {
-        void set(BrazeUser user, T value);
-    }
-
-    private static final class Attribute {
-        final String signature;
-        final UserUpdate update;
-
-        Attribute(String signature, UserUpdate update) {
-            this.signature = signature;
-            this.update = update;
-        }
     }
 
     private JSONObject sentAttributes() {
@@ -551,223 +308,6 @@ public class BrazeIntegration extends Integration<Braze> {
                 });
     }
 
-    /** Maps traits to Braze user updates, keyed by the slot used for deduplication. */
-    private Map<String, Attribute> attributes(Traits traits) {
-        Map<String, Attribute> attributes = new LinkedHashMap<>();
-        Set<String> consumed = new HashSet<>(Arrays.asList("userId", "anonymousId", "address"));
-        Map<?, ?> address =
-                traits.get("address") instanceof Map
-                        ? (Map<?, ?>) traits.get("address")
-                        : Collections.emptyMap();
-
-        putString(
-                attributes,
-                "firstName",
-                find(traits, consumed, "firstName", "first_name"),
-                BrazeUser::setFirstName);
-        putString(
-                attributes,
-                "lastName",
-                find(traits, consumed, "lastName", "last_name"),
-                BrazeUser::setLastName);
-        putString(attributes, "email", find(traits, consumed, "email"), BrazeUser::setEmail);
-        putString(attributes, "phone", find(traits, consumed, "phone"), BrazeUser::setPhoneNumber);
-        Object city = find(traits, consumed, "home_city");
-        putString(
-                attributes,
-                "homeCity",
-                address.containsKey("city") ? address.get("city") : city,
-                BrazeUser::setHomeCity);
-        Object country = find(traits, consumed, "country");
-        putString(
-                attributes,
-                "country",
-                address.containsKey("country") ? address.get("country") : country,
-                BrazeUser::setCountry);
-        for (Map.Entry<?, ?> field : address.entrySet()) {
-            String key = String.valueOf(field.getKey());
-            if (!"city".equals(key) && !"country".equals(key)) {
-                putCustom(attributes, key, field.getValue());
-            }
-        }
-
-        Object gender = find(traits, consumed, "gender");
-        if (gender != ABSENT) {
-            final Gender brazeGender = gender(gender);
-            if (brazeGender == null) {
-                logger.info("Dropping unsupported gender %s.", gender);
-            } else {
-                put(
-                        attributes,
-                        "reserved.gender",
-                        brazeGender.name(),
-                        brazeGender,
-                        BrazeUser::setGender);
-            }
-        }
-
-        Object birthday = find(traits, consumed, "birthday", "dob");
-        if (birthday != ABSENT) {
-            int[] date = dateParts(birthday);
-            if (date == null) {
-                logger.info("Dropping birthday %s that could not be parsed as a date.", birthday);
-            } else {
-                putDateOfBirth(attributes, "birthday", date);
-            }
-        }
-
-        putSubscription(
-                attributes,
-                "emailSubscribe",
-                find(traits, consumed, "email_subscribe"),
-                BrazeUser::setEmailNotificationSubscriptionType);
-        putSubscription(
-                attributes,
-                "pushSubscribe",
-                find(traits, consumed, "push_subscribe"),
-                BrazeUser::setPushNotificationSubscriptionType);
-
-        for (Map.Entry<String, Object> entry : traits.entrySet()) {
-            if (!consumed.contains(entry.getKey())) {
-                putCustom(attributes, entry.getKey(), entry.getValue());
-            }
-        }
-        return attributes;
-    }
-
-    /** Returns the value of the first key present, or {@link #ABSENT}, and marks all as mapped. */
-    private static Object find(Map<String, Object> traits, Set<String> consumed, String... keys) {
-        Object value = ABSENT;
-        for (String key : keys) {
-            consumed.add(key);
-            if (value == ABSENT && traits.containsKey(key)) {
-                value = traits.get(key);
-            }
-        }
-        return value;
-    }
-
-    private static <T> void put(
-            Map<String, Attribute> attributes,
-            String key,
-            String signature,
-            final T value,
-            final Setter<T> setter) {
-        attributes.put(key, new Attribute(signature, user -> setter.set(user, value)));
-    }
-
-    private static void putString(
-            Map<String, Attribute> attributes, String name, Object value, Setter<String> setter) {
-        if (value != ABSENT) {
-            String string = value == null ? null : String.valueOf(value);
-            put(attributes, "reserved." + name, String.valueOf(string), string, setter);
-        }
-    }
-
-    private static void putDateOfBirth(Map<String, Attribute> attributes, String name, int[] date) {
-        put(
-                attributes,
-                "reserved." + name,
-                Arrays.toString(date),
-                date,
-                (user, d) -> user.setDateOfBirth(d[0], Month.getMonth(d[1]), d[2]));
-    }
-
-    private void putSubscription(
-            Map<String, Attribute> attributes,
-            String name,
-            Object value,
-            Setter<NotificationSubscriptionType> setter) {
-        if (value == ABSENT) {
-            return;
-        }
-        NotificationSubscriptionType type = null;
-        if ("opted_in".equals(value)) {
-            type = NotificationSubscriptionType.OPTED_IN;
-        } else if ("subscribed".equals(value)) {
-            type = NotificationSubscriptionType.SUBSCRIBED;
-        } else if ("unsubscribed".equals(value)) {
-            type = NotificationSubscriptionType.UNSUBSCRIBED;
-        }
-        if (type == null) {
-            logger.info("Dropping unsupported %s value %s.", name, value);
-        } else {
-            put(attributes, "reserved." + name, type.name(), type, setter);
-        }
-    }
-
-    private void putCustom(Map<String, Attribute> attributes, final String key, Object value) {
-        if (key.isEmpty()) {
-            return;
-        }
-        final Object normalized = attributeValue(value);
-        if (normalized == UNSUPPORTED) {
-            logger.info("Dropping attribute %s with unsupported value %s.", key, value);
-            return;
-        }
-        String signature;
-        if (normalized == null) {
-            signature = "null";
-        } else if (normalized instanceof String[]) {
-            signature = "String[]:" + new JSONArray(Arrays.asList((String[]) normalized));
-        } else if (normalized instanceof Date) {
-            signature = "Date:" + ((Date) normalized).getTime();
-        } else {
-            signature = normalized.getClass().getSimpleName() + ":" + normalized;
-        }
-        attributes.put(
-                "custom." + key,
-                new Attribute(signature, user -> setCustom(user, key, normalized)));
-    }
-
-    private Object attributeValue(Object value) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof Map) {
-            return toJson(value).toString();
-        }
-        if (value instanceof Collection || value instanceof Object[]) {
-            List<String> strings = new ArrayList<>();
-            for (Object element : elements(value)) {
-                strings.add(
-                        element instanceof Map
-                                ? toJson(element).toString()
-                                : String.valueOf(element));
-            }
-            return strings.toArray(new String[0]);
-        }
-        if (value instanceof Date) {
-            return value;
-        }
-        if (value instanceof String || value instanceof Boolean || value instanceof Number) {
-            return scalar(value);
-        }
-        return UNSUPPORTED;
-    }
-
-    private static void setCustom(BrazeUser user, String key, Object value) {
-        if (value == null) {
-            user.unsetCustomUserAttribute(key);
-        } else if (value instanceof String) {
-            user.setCustomUserAttribute(key, (String) value);
-        } else if (value instanceof Boolean) {
-            user.setCustomUserAttribute(key, (boolean) (Boolean) value);
-        } else if (value instanceof Integer) {
-            user.setCustomUserAttribute(key, (int) (Integer) value);
-        } else if (value instanceof Long) {
-            user.setCustomUserAttribute(key, (long) (Long) value);
-        } else if (value instanceof Float) {
-            user.setCustomUserAttribute(key, (float) (Float) value);
-        } else if (value instanceof Double) {
-            user.setCustomUserAttribute(key, (double) (Double) value);
-        } else if (value instanceof Date) {
-            user.setCustomUserAttributeToSecondsFromEpoch(key, ((Date) value).getTime() / 1000);
-        } else if (value instanceof String[]) {
-            user.setCustomAttributeArray(key, (String[]) value);
-        }
-    }
-
     private void setAttributionData(Object campaign) {
         Map<?, ?> fields = campaign instanceof Map ? (Map<?, ?>) campaign : Collections.emptyMap();
         final AttributionData data =
@@ -777,252 +317,6 @@ public class BrazeIntegration extends Integration<Braze> {
                         string(fields.get("ad_group")),
                         string(fields.get("ad_creative")));
         updateUser(Collections.<UserUpdate>singletonList(user -> user.setAttributionData(data)));
-    }
-
-    private boolean isPurchase(TrackPayload track) {
-        try {
-            return purchaseDetection.isPurchaseEvent(track);
-        } catch (Exception e) {
-            logger.error(e, "Purchase event matcher failed for %s.", track.event());
-            return false;
-        }
-    }
-
-    private void logPurchases(TrackPayload track, Properties properties) {
-        Object currencyValue = properties.get("currency");
-        String currency =
-                currencyValue instanceof String && ((String) currencyValue).length() == 3
-                        ? (String) currencyValue
-                        : "USD";
-        List<Map<String, Object>> products = products(properties.get("products"));
-
-        if (!(purchaseGrouping instanceof PurchaseGrouping.PerProduct) || products.isEmpty()) {
-            BigDecimal total =
-                    BigDecimal.valueOf(
-                            number(
-                                    properties.containsKey("revenue")
-                                            ? properties.get("revenue")
-                                            : properties.get("total"),
-                                    0));
-            logPurchase(
-                    new BrazePurchase(track.event(), total, currency, 1, properties),
-                    new PurchaseContext(track, properties, null));
-            return;
-        }
-
-        ProductIdentifier identifier = ((PurchaseGrouping.PerProduct) purchaseGrouping).identifier;
-        Map<String, Object> order = new LinkedHashMap<>(properties);
-        order.remove("products");
-        for (Map<String, Object> product : products) {
-            Map<String, Object> purchase = new LinkedHashMap<>(order);
-            purchase.putAll(product);
-            purchase.remove("price");
-            purchase.remove("quantity");
-            logPurchase(
-                    new BrazePurchase(
-                            productId(product, identifier),
-                            BigDecimal.valueOf(number(product.get("price"), 0)),
-                            currency,
-                            (int) number(product.get("quantity"), 1),
-                            purchase),
-                    new PurchaseContext(track, properties, product));
-        }
-    }
-
-    private void logPurchase(BrazePurchase purchase, PurchaseContext context) {
-        if (purchaseTransformer != null) {
-            try {
-                purchase = purchaseTransformer.transform(purchase, context);
-            } catch (Exception e) {
-                logger.error(
-                        e,
-                        "Purchase transformer failed for %s; logging the default purchase.",
-                        context.event().event());
-            }
-            if (purchase == null) {
-                return;
-            }
-        }
-        if (Utils.isNullOrEmpty(purchase.productId())) {
-            logger.info("Dropping purchase without a product ID from %s.", context.event().event());
-            return;
-        }
-        braze.logPurchase(
-                purchase.productId(),
-                purchase.currency(),
-                purchase.price(),
-                purchase.quantity(),
-                brazeProperties(purchase.properties()));
-    }
-
-    private static String productId(Map<String, Object> product, ProductIdentifier identifier) {
-        List<String> keys =
-                identifier == ProductIdentifier.NAME
-                        ? Collections.singletonList("name")
-                        : Arrays.asList("sku", "product_id", "name");
-        for (String key : keys) {
-            Object id = product.get(key);
-            if (id != null && !String.valueOf(id).isEmpty()) {
-                return String.valueOf(id);
-            }
-        }
-        return "";
-    }
-
-    private static List<Map<String, Object>> products(Object value) {
-        List<Map<String, Object>> products = new ArrayList<>();
-        if (value instanceof Collection) {
-            for (Object product : (Collection<?>) value) {
-                if (product instanceof Map) {
-                    Map<String, Object> copy = new LinkedHashMap<>();
-                    for (Map.Entry<?, ?> field : ((Map<?, ?>) product).entrySet()) {
-                        copy.put(String.valueOf(field.getKey()), field.getValue());
-                    }
-                    products.add(copy);
-                }
-            }
-        }
-        return products;
-    }
-
-    private BrazeProperties brazeProperties(Map<String, ?> properties) {
-        BrazeProperties brazeProperties = new BrazeProperties();
-        for (Map.Entry<String, ?> entry : properties.entrySet()) {
-            String key = entry.getKey();
-            Object value = propertyValue(entry.getValue());
-            if (!key.isEmpty() && value != null) {
-                brazeProperties.addProperty(key, value);
-            }
-        }
-        return brazeProperties;
-    }
-
-    private Object propertyValue(Object value) {
-        if (value instanceof Map || value instanceof Collection || value instanceof Object[]) {
-            return toJson(value);
-        }
-        return scalar(value);
-    }
-
-    /**
-     * Converts nested maps and collections explicitly, because Android's {@code
-     * JSONArray(Collection)} doesn't convert nested maps into {@code JSONObject}s.
-     */
-    private static Object toJson(Object value) {
-        if (value instanceof Map) {
-            JSONObject object = new JSONObject();
-            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
-                try {
-                    object.put(String.valueOf(entry.getKey()), toJson(entry.getValue()));
-                } catch (JSONException ignored) {
-                    // Only thrown for NaN and infinite numbers, which JSON can't represent.
-                }
-            }
-            return object;
-        }
-        if (value instanceof Collection || value instanceof Object[]) {
-            JSONArray array = new JSONArray();
-            for (Object element : elements(value)) {
-                array.put(toJson(element));
-            }
-            return array;
-        }
-        return value == null ? JSONObject.NULL : value;
-    }
-
-    private static Collection<?> elements(Object value) {
-        return value instanceof Collection
-                ? (Collection<?>) value
-                : Arrays.asList((Object[]) value);
-    }
-
-    /** Braze accepts int, long, float, and double; other numbers are sent as doubles. */
-    private static Object scalar(Object value) {
-        if (value instanceof Number
-                && !(value instanceof Integer
-                        || value instanceof Long
-                        || value instanceof Float
-                        || value instanceof Double)) {
-            return ((Number) value).doubleValue();
-        }
-        return value;
-    }
-
-    private static Gender gender(Object value) {
-        if (!(value instanceof String)) {
-            return null;
-        }
-        switch (((String) value).toLowerCase(Locale.US)) {
-            case "m":
-            case "male":
-                return Gender.MALE;
-            case "f":
-            case "female":
-                return Gender.FEMALE;
-            case "o":
-            case "other":
-                return Gender.OTHER;
-            case "u":
-            case "unknown":
-                return Gender.UNKNOWN;
-            case "n":
-            case "not_applicable":
-            case "not applicable":
-                return Gender.NOT_APPLICABLE;
-            case "p":
-            case "prefer_not_to_say":
-            case "prefer not to say":
-                return Gender.PREFER_NOT_TO_SAY;
-            default:
-                return null;
-        }
-    }
-
-    /**
-     * Returns {year, zero-based month, day}. A plain {@code yyyy-MM-dd} is used as written, so the
-     * birthday doesn't shift with the device's time zone.
-     */
-    private static int[] dateParts(Object value) {
-        Date date = null;
-        if (value instanceof Date) {
-            date = (Date) value;
-        } else if (value instanceof String) {
-            Matcher matcher = DATE_ONLY.matcher((String) value);
-            if (matcher.matches()) {
-                return new int[] {
-                    Integer.parseInt(matcher.group(1)),
-                    Integer.parseInt(matcher.group(2)) - 1,
-                    Integer.parseInt(matcher.group(3))
-                };
-            }
-            try {
-                date = Utils.parseISO8601Date((String) value);
-            } catch (Exception ignored) {
-            }
-        }
-        if (date == null) {
-            return null;
-        }
-        Calendar calendar = Calendar.getInstance();
-        calendar.setTime(date);
-        return new int[] {
-            calendar.get(Calendar.YEAR),
-            calendar.get(Calendar.MONTH),
-            calendar.get(Calendar.DAY_OF_MONTH)
-        };
-    }
-
-    private static double number(Object value, double defaultValue) {
-        if (value instanceof Number) {
-            return ((Number) value).doubleValue();
-        }
-        if (value instanceof String) {
-            try {
-                return Double.parseDouble((String) value);
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        return defaultValue;
     }
 
     private static String string(Object value) {

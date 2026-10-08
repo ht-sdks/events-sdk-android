@@ -398,9 +398,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void purchaseProductIdentifierName() {
-        options.purchaseGrouping(
-                BrazeIntegration.PurchaseGrouping.perProduct(
-                        BrazeIntegration.ProductIdentifier.NAME));
+        options.purchaseGrouping(PurchaseGrouping.perProduct(ProductIdentifier.NAME));
         integration()
                 .track(
                         track(
@@ -435,7 +433,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void perOrderGroupingLogsOnePurchasePerOrder() throws Exception {
-        options.purchaseGrouping(BrazeIntegration.PurchaseGrouping.perOrder());
+        options.purchaseGrouping(PurchaseGrouping.perOrder());
         integration()
                 .track(
                         track(
@@ -485,8 +483,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void customPurchaseEventNames() {
-        options.purchaseDetection(
-                BrazeIntegration.PurchaseDetection.eventNames("Membership Purchased"));
+        options.purchaseDetection(PurchaseDetection.eventNames("Membership Purchased"));
         integration().track(track("Membership Purchased", new ValueMap().putValue("total", 5)));
         integration().track(track("Order Completed", new ValueMap().putValue("total", 5)));
 
@@ -497,8 +494,7 @@ public class BrazeIntegrationTest {
     @Test
     public void purchaseEventMatcherReplacesDefaultNames() {
         options.purchaseDetection(
-                BrazeIntegration.PurchaseDetection.matcher(
-                        track -> "Upgraded".equals(track.event())));
+                PurchaseDetection.matcher(track -> "Upgraded".equals(track.event())));
         integration().track(track("Upgraded", new ValueMap().putValue("total", 5)));
         integration().track(track("Order Completed", new ValueMap().putValue("revenue", 5)));
 
@@ -510,7 +506,7 @@ public class BrazeIntegrationTest {
     public void purchaseEventMatcherErrorLogsCustomEvent() {
         RuntimeException error = new RuntimeException("boom");
         options.purchaseDetection(
-                BrazeIntegration.PurchaseDetection.matcher(
+                PurchaseDetection.matcher(
                         track -> {
                             throw error;
                         }));
@@ -535,7 +531,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void purchaseTransformerModifiesPurchases() throws Exception {
-        List<BrazeIntegration.PurchaseContext> contexts = new ArrayList<>();
+        List<PurchaseContext> contexts = new ArrayList<>();
         options.purchaseTransformer(
                 (purchase, context) -> {
                     contexts.add(context);
@@ -558,7 +554,7 @@ public class BrazeIntegrationTest {
         assertThat(contexts.get(0).order()).containsKey("products");
         assertThat(contexts.get(0).product()).containsEntry("sku", "SKU-1");
 
-        options.purchaseGrouping(BrazeIntegration.PurchaseGrouping.perOrder());
+        options.purchaseGrouping(PurchaseGrouping.perOrder());
         integration().track(track);
         capturePurchase("X-Order Completed", "EUR", "9.5", 3);
         assertThat(contexts.get(1).product()).isNull();
