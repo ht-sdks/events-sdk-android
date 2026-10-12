@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Braze Sample</string>
+    <string name="last_action_placeholder">Last action</string>
+    <string name="new_user">New user</string>
+    <string name="identify_a">Identify</string>
+    <string name="identify_a_again">Identify again</string>
+    <string name="change_plan">Change plan</string>
+    <string name="custom_event">Custom event</string>
+    <string name="purchase_two_products">Purchase, two products</string>
+    <string name="purchase_custom_name">Purchase, custom name</string>
+    <string name="screen">Screen</string>
+    <string name="opt_out_event">Opt-out event</string>
+    <string name="flush">Flush</string>
+    <string name="reset">Reset</string>
+</resources>
