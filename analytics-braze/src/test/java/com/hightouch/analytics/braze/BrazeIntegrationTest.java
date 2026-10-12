@@ -373,6 +373,42 @@ public class BrazeIntegrationTest {
     }
 
     @Test
+    public void subscriptionValuesAreNormalizedBeforeCaching() {
+        Locale previous = Locale.getDefault();
+        try {
+            Locale.setDefault(new Locale("tr", "TR"));
+            BrazeIntegration integration = integration();
+            String[] values = {"opted_in", "subscribed", "unsubscribed"};
+            NotificationSubscriptionType[] types = {
+                NotificationSubscriptionType.OPTED_IN,
+                NotificationSubscriptionType.SUBSCRIBED,
+                NotificationSubscriptionType.UNSUBSCRIBED
+            };
+            for (int i = 0; i < values.length; i++) {
+                for (String value : Arrays.asList(" \t" + values[i].toUpperCase(Locale.ROOT) + "\n", values[i])) {
+                    integration.identify(identify("user-1", new ValueMap()
+                            .putValue("email_subscribe", value).putValue("push_subscribe", value)));
+                }
+                verify(user, times(1)).setEmailNotificationSubscriptionType(types[i]);
+                verify(user, times(1)).setPushNotificationSubscriptionType(types[i]);
+            }
+        } finally {
+            Locale.setDefault(previous);
+        }
+    }
+
+    @Test
+    public void invalidSubscriptionValuesAreIgnored() {
+        BrazeIntegration integration = integration();
+        for (Object value : Arrays.asList(null, true, 1, " ", " Maybe ", " Constructor ", "__proto__")) {
+            integration.identify(identify("user-1", new ValueMap()
+                    .putValue("email_subscribe", value).putValue("push_subscribe", value)));
+        }
+        verify(user, never()).setEmailNotificationSubscriptionType(any());
+        verify(user, never()).setPushNotificationSubscriptionType(any());
+    }
+
+    @Test
     public void otherTraitNamesAreCustomAttributesAndInvalidValuesAreDropped() {
         integration()
                 .identify(

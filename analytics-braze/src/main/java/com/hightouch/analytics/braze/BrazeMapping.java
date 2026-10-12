@@ -202,6 +202,9 @@ final class BrazeMapping {
         if (value == ABSENT) {
             return;
         }
+        if (value instanceof String) {
+            value = ((String) value).trim().toLowerCase(Locale.ROOT);
+        }
         NotificationSubscriptionType type = null;
         if ("opted_in".equals(value)) {
             type = NotificationSubscriptionType.OPTED_IN;
