@@ -55,6 +55,13 @@ public abstract class Integration<T> {
         String key();
     }
 
+    /**
+     * A {@link Factory} for an integration that is configured in code rather than by project
+     * settings. It is created even when project settings have no entry for its key, in which case
+     * {@link Factory#create} receives {@code null} settings.
+     */
+    public interface LocallyConfiguredFactory extends Factory {}
+
     /** @see android.app.Application.ActivityLifecycleCallbacks */
     public void onActivityCreated(Activity activity, Bundle savedInstanceState) {}
 

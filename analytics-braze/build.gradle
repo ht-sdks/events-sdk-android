@@ -1,0 +1,39 @@
+apply plugin: 'com.android.library'
+apply plugin: 'com.vanniktech.maven.publish'
+
+apply from: rootProject.file('gradle/android.gradle')
+
+// The Braze SDK version to compile and test against. Consumers declare their own
+// `com.braze:android-sdk-base` (or `android-sdk-ui`) dependency, so they control the Braze
+// version; this module never forces one on them (compileOnly below).
+def brazeVersion = '41.1.1'
+
+android {
+	namespace 'com.hightouch.analytics.braze'
+
+	defaultConfig {
+		// The Braze SDK does not support the core SDK's minSdk 14.
+		minSdkVersion 21
+	}
+}
+
+dependencies {
+	api project(':analytics')
+
+	compileOnly "com.braze:android-sdk-base:$brazeVersion"
+
+	testImplementation "com.braze:android-sdk-base:$brazeVersion"
+	testImplementation 'junit:junit:4.13.2'
+	testImplementation('org.robolectric:robolectric:4.7.3') {
+		exclude group: 'commons-logging', module: 'commons-logging'
+		exclude group: 'org.apache.httpcomponents', module: 'httpclient'
+	}
+	//noinspection GradleDependency (matching the core module's assertj pin)
+	testImplementation 'org.assertj:assertj-core:1.7.1'
+	// Braze's classes are final, so the tests need Mockito's inline mock maker.
+	testImplementation 'org.mockito:mockito-inline:4.11.0'
+}
+
+repositories {
+	mavenCentral()
+}
