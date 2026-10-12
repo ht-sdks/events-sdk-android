@@ -81,6 +81,7 @@ public class BrazeIntegration extends Integration<Braze> {
         PurchaseDetection purchaseDetection =
                 PurchaseDetection.eventNames("Order Completed", "Completed Order");
         PurchaseTransformer purchaseTransformer;
+        String defaultCurrency;
 
         Builder(Context context, BrazeConfig config, Braze braze) {
             if (context == null) {
@@ -124,6 +125,17 @@ public class BrazeIntegration extends Integration<Braze> {
          */
         public Builder purchaseDetection(@NonNull PurchaseDetection detection) {
             this.purchaseDetection = detection;
+            return this;
+        }
+
+        /**
+         * Explicit fallback for missing or invalid purchase currencies. No implicit default.
+         * Codes are trimmed, uppercased, and checked for exactly three ASCII letters.
+         * Braze determines which currency codes it supports.
+         * Without a valid fallback, the purchase is rejected and an error is logged.
+         */
+        public Builder defaultCurrency(@NonNull String currency) {
+            this.defaultCurrency = currency;
             return this;
         }
 

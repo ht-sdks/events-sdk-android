@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -51,6 +52,7 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @RunWith(RobolectricTestRunner.class)
@@ -79,6 +81,95 @@ public class BrazeIntegrationTest {
                 application.getSharedPreferences(
                         BrazeIntegration.PREFERENCES_NAME, Context.MODE_PRIVATE);
         options = BrazeIntegration.builder(application, braze);
+    }
+
+    @Test
+    public void normalizesCurrencyWithoutDefault() {
+        for (String currency : Arrays.asList(" eur\n", "uSd", "btc", " zzz ")) {
+            integration().track(track("Order Completed", new ValueMap().putValue("currency", currency)));
+            capturePurchase(
+                    "Order Completed", currency.trim().toUpperCase(Locale.ROOT), "0.0", 1);
+        }
+    }
+
+    @Test
+    public void invalidCurrencyIsRejectedAndReported() {
+        Logger logger = mock(Logger.class);
+        BrazeIntegration integration = new BrazeIntegration(braze, options, preferences, logger);
+        List<Object> values =
+                Arrays.asList(null, 123, "", "   ", "dollars", "US", "123", "US1", "€€€", "éur", "US D");
+        for (Object currency : values) {
+            integration.track(track("Order Completed", new ValueMap().putValue("currency", currency)));
+        }
+        verify(logger, times(values.size()))
+                .error(any(IllegalArgumentException.class), anyString(), eq("Order Completed"));
+        verifyNoInteractions(braze);
+        integration.track(track("Next event", new ValueMap()));
+        verify(braze).logCustomEvent(eq("Next event"), any());
+    }
+
+    @Test
+    public void explicitCurrencyFallbackIsNormalizedAndOnlyUsedWhenNeeded() {
+        options.defaultCurrency(" gbp\n");
+        integration().track(track("Order Completed", new ValueMap().putValue("currency", "US1")));
+        capturePurchase("Order Completed", "GBP", "0.0", 1);
+        integration().track(track("Completed Order", new ValueMap().putValue("currency", "eur")));
+        capturePurchase("Completed Order", "EUR", "0.0", 1);
+        integration().track(track("Order Completed", new ValueMap()));
+        verify(braze, times(2)).logPurchase(eq("Order Completed"), eq("GBP"), any(), eq(1), any());
+    }
+
+    @Test
+    public void currencyRecognitionIsLeftToBrazeWithAnExplicitDefault() {
+        options.defaultCurrency(" zzz ");
+        integration().track(track("Order Completed", new ValueMap()
+                .putValue("currency", "abc").putValue("revenue", 2).putValue("quantity", 1)));
+        capturePurchase("Order Completed", "ABC", "2.0", 1);
+        integration().track(track("Order Completed", new ValueMap()
+                .putValue("revenue", 2).putValue("quantity", 1)));
+        capturePurchase("Order Completed", "ZZZ", "2.0", 1);
+    }
+
+    @Test
+    public void invalidDefaultCurrencyIsRejected() {
+        options.defaultCurrency("US1");
+        Logger logger = mock(Logger.class);
+        new BrazeIntegration(braze, options, preferences, logger)
+                .track(track("Order Completed", new ValueMap()));
+        ArgumentCaptor<Exception> error = ArgumentCaptor.forClass(Exception.class);
+        verify(logger).error(error.capture(), anyString(), eq("Order Completed"));
+        assertThat(error.getValue()).isInstanceOf(IllegalArgumentException.class);
+        assertThat(error.getValue().getMessage()).contains("defaultCurrency must be a three-letter currency code");
+        verifyNoInteractions(braze);
+    }
+
+    @Test
+    public void validatesTransformedCurrencyInBothGroupingModes() {
+        for (PurchaseGrouping grouping :
+                Arrays.asList(
+                        PurchaseGrouping.perOrder(),
+                        PurchaseGrouping.perProduct(ProductIdentifier.SKU))) {
+            clearInvocations(braze);
+            options.purchaseGrouping(grouping)
+                    .purchaseTransformer((purchase, context) -> purchase.withCurrency(" zzz "));
+            TrackPayload event =
+                    track(
+                            "Order Completed",
+                            new ValueMap()
+                                    .putValue("currency", "USD")
+                                    .putValue(
+                                            "products",
+                                            Collections.singletonList(
+                                                    new ValueMap().putValue("sku", "SKU1"))));
+            integration().track(event);
+            verify(braze).logPurchase(anyString(), eq("ZZZ"), any(), eq(1), any());
+            options.purchaseTransformer((purchase, context) -> purchase.withCurrency("US1"));
+            Logger logger = mock(Logger.class);
+            new BrazeIntegration(braze, options, preferences, logger).track(event);
+            verify(logger)
+                    .error(any(IllegalArgumentException.class), anyString(), eq("Order Completed"));
+            verify(braze, times(1)).logPurchase(anyString(), anyString(), any(), anyInt(), any());
+        }
     }
 
     private BrazeIntegration integration() {
@@ -343,6 +434,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void orderCompletedLogsPurchasePerProduct() throws Exception {
+        options.defaultCurrency("USD");
         List<ValueMap> products =
                 Arrays.asList(
                         new ValueMap()
@@ -398,6 +490,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void purchaseProductIdentifierName() {
+        options.defaultCurrency("USD");
         options.purchaseGrouping(PurchaseGrouping.perProduct(ProductIdentifier.NAME));
         integration()
                 .track(
@@ -417,6 +510,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void orderWithoutProductsLogsSinglePurchase() throws Exception {
+        options.defaultCurrency("USD");
         integration()
                 .track(
                         track(
@@ -433,6 +527,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void perOrderGroupingLogsOnePurchasePerOrder() throws Exception {
+        options.defaultCurrency("USD");
         options.purchaseGrouping(PurchaseGrouping.perOrder());
         integration()
                 .track(
@@ -470,6 +565,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void defaultPurchaseEventNames() {
+        options.defaultCurrency("USD");
         integration().track(track("Order Completed", new ValueMap().putValue("total", 5)));
         integration().track(track("Completed Order", new ValueMap().putValue("total", 5)));
         integration().track(track("order completed", new ValueMap().putValue("total", 5)));
@@ -483,6 +579,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void customPurchaseEventNames() {
+        options.defaultCurrency("USD");
         options.purchaseDetection(PurchaseDetection.eventNames("Membership Purchased"));
         integration().track(track("Membership Purchased", new ValueMap().putValue("total", 5)));
         integration().track(track("Order Completed", new ValueMap().putValue("total", 5)));
@@ -493,6 +590,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void purchaseEventMatcherReplacesDefaultNames() {
+        options.defaultCurrency("USD");
         options.purchaseDetection(
                 PurchaseDetection.matcher(track -> "Upgraded".equals(track.event())));
         integration().track(track("Upgraded", new ValueMap().putValue("total", 5)));
@@ -504,6 +602,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void purchaseEventMatcherErrorLogsCustomEvent() {
+        options.defaultCurrency("USD");
         RuntimeException error = new RuntimeException("boom");
         options.purchaseDetection(
                 PurchaseDetection.matcher(
@@ -531,6 +630,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void purchaseTransformerModifiesPurchases() throws Exception {
+        options.defaultCurrency("USD");
         List<PurchaseContext> contexts = new ArrayList<>();
         options.purchaseTransformer(
                 (purchase, context) -> {
@@ -562,6 +662,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void purchaseTransformerSkipsNullAndInvalidResults() {
+        options.defaultCurrency("USD");
         options.purchaseTransformer(
                 (purchase, context) -> {
                     if ("SKU-1".equals(purchase.productId())) {
@@ -586,6 +687,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void purchaseTransformerCanSetMissingProductId() {
+        options.defaultCurrency("USD");
         options.purchaseTransformer(
                 (purchase, context) ->
                         purchase.productId().isEmpty()
@@ -599,6 +701,7 @@ public class BrazeIntegrationTest {
 
     @Test
     public void purchaseTransformerErrorLogsDefaultPurchase() throws Exception {
+        options.defaultCurrency("USD");
         RuntimeException error = new RuntimeException("boom");
         options.purchaseTransformer(
                 (purchase, context) -> {

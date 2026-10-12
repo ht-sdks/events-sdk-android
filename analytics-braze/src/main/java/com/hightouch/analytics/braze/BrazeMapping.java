@@ -43,6 +43,7 @@ final class BrazeMapping {
     private final PurchaseGrouping purchaseGrouping;
     private final PurchaseDetection purchaseDetection;
     private final PurchaseTransformer purchaseTransformer;
+    private final String defaultCurrency;
 
     BrazeMapping(Braze braze, BrazeIntegration.Builder options, Logger logger) {
         this.braze = braze;
@@ -50,6 +51,7 @@ final class BrazeMapping {
         this.purchaseGrouping = options.purchaseGrouping;
         this.purchaseDetection = options.purchaseDetection;
         this.purchaseTransformer = options.purchaseTransformer;
+        this.defaultCurrency = options.defaultCurrency;
     }
 
     interface UserUpdate {
@@ -297,11 +299,7 @@ final class BrazeMapping {
     }
 
     void logPurchases(TrackPayload track, Properties properties) {
-        Object currencyValue = properties.get("currency");
-        String currency =
-                currencyValue instanceof String && ((String) currencyValue).length() == 3
-                        ? (String) currencyValue
-                        : "USD";
+        String currency = purchaseCurrency(properties.get("currency"));
         List<Map<String, Object>> products = products(properties.get("products"));
 
         if (!(purchaseGrouping instanceof PurchaseGrouping.PerProduct) || products.isEmpty()) {
@@ -357,10 +355,31 @@ final class BrazeMapping {
         }
         braze.logPurchase(
                 purchase.productId(),
-                purchase.currency(),
+                purchaseCurrency(purchase.currency()),
                 purchase.price(),
                 purchase.quantity(),
                 brazeProperties(purchase.properties()));
+    }
+
+    private String purchaseCurrency(Object value) {
+        String currency = normalizeCurrency(value);
+        if (currency != null) return currency;
+        if (defaultCurrency == null) {
+            throw new IllegalArgumentException(
+                    "Braze purchase rejected: invalid or missing currency. Send a three-letter currency code or configure defaultCurrency.");
+        }
+        String fallback = normalizeCurrency(defaultCurrency);
+        if (fallback == null) {
+            throw new IllegalArgumentException(
+                    "Braze purchase rejected: defaultCurrency must be a three-letter currency code.");
+        }
+        return fallback;
+    }
+
+    private static String normalizeCurrency(Object value) {
+        if (!(value instanceof String)) return null;
+        String currency = ((String) value).trim().toUpperCase(Locale.ROOT);
+        return currency.matches("[A-Z]{3}") ? currency : null;
     }
 
     private static String productId(Map<String, Object> product, ProductIdentifier identifier) {
