@@ -330,6 +330,51 @@ public class BrazeIntegrationTest {
     }
 
     @Test
+    public void nullClearsStandardAttributesAndPreservesAliasPrecedence() {
+        BrazeIntegration integration = integration();
+        ValueMap values = new ValueMap().putValue("firstName", "null").putValue("lastName", "Lovelace")
+                .putValue("email", "ada@example.com").putValue("phone", "555-0100").putValue("gender", "female")
+                .putValue("address", new ValueMap().putValue("city", "London").putValue("country", "GB"));
+        integration.identify(identify("user-1", values));
+        clearInvocations(user);
+        integration.identify(identify("user-1", Collections.emptyMap()));
+        verifyNoInteractions(user);
+        ValueMap clears = new ValueMap().putValue("firstName", null).putValue("first_name", "Ignored")
+                .putValue("lastName", null).putValue("last_name", "Ignored").putValue("email", null)
+                .putValue("phone", null).putValue("gender", null).putValue("home_city", "Ignored")
+                .putValue("country", "US")
+                .putValue("address", new ValueMap().putValue("city", null).putValue("country", null));
+        integration.identify(identify("user-1", clears));
+        verify(user).setFirstName(null);
+        verify(user).setLastName(null);
+        verify(user).setEmail(null);
+        verify(user).setPhoneNumber(null);
+        verify(user).setGender(null);
+        verify(user).setHomeCity(null);
+        verify(user).setCountry(null);
+        clearInvocations(user);
+        integration().identify(identify("user-1", clears));
+        verifyNoInteractions(user);
+        integration.identify(identify("user-1", values));
+        verify(user).setFirstName("null");
+        verify(user).setGender(Gender.FEMALE);
+        verify(user).setEmail("ada@example.com");
+    }
+
+    @Test
+    public void unsupportedBirthdayClearIsReportedWithoutChangingCache() {
+        Logger logger = mock(Logger.class);
+        BrazeIntegration integration = new BrazeIntegration(braze, options, preferences, logger);
+        ValueMap values = new ValueMap().putValue("birthday", "1990-05-12");
+        integration.identify(identify("user-1", values));
+        clearInvocations(user);
+        integration.identify(identify("user-1", new ValueMap().putValue("birthday", null).putValue("dob", "2000-01-01")));
+        integration.identify(identify("user-1", values));
+        verifyNoInteractions(user);
+        verify(logger).info("Cannot clear birthday: the Braze Android SDK does not support it. Existing value unchanged.");
+    }
+
+    @Test
     public void reservedTraits() {
         ValueMap address =
                 new ValueMap()

@@ -113,7 +113,9 @@ final class BrazeMapping {
         }
 
         Object gender = find(traits, consumed, "gender");
-        if (gender != ABSENT) {
+        if (gender == null) {
+            put(attributes, "reserved.gender", "null", null, BrazeUser::setGender);
+        } else if (gender != ABSENT) {
             final Gender brazeGender = gender(gender);
             if (brazeGender == null) {
                 logger.info("Dropping unsupported gender %s.", gender);
@@ -128,7 +130,9 @@ final class BrazeMapping {
         }
 
         Object birthday = find(traits, consumed, "birthday", "dob");
-        if (birthday != ABSENT) {
+        if (birthday == null) {
+            logger.info("Cannot clear birthday: the Braze Android SDK does not support it. Existing value unchanged.");
+        } else if (birthday != ABSENT) {
             int[] date = dateParts(birthday);
             if (date == null) {
                 logger.info("Dropping birthday %s that could not be parsed as a date.", birthday);
@@ -181,7 +185,7 @@ final class BrazeMapping {
             Map<String, Attribute> attributes, String name, Object value, Setter<String> setter) {
         if (value != ABSENT) {
             String string = value == null ? null : String.valueOf(value);
-            put(attributes, "reserved." + name, String.valueOf(string), string, setter);
+            put(attributes, "reserved." + name, string == null ? "null" : "string:" + string, string, setter);
         }
     }
 
