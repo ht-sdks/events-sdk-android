@@ -86,7 +86,7 @@ public class BrazeIntegrationTest {
     @Test
     public void normalizesCurrencyWithoutDefault() {
         for (String currency : Arrays.asList(" eur\n", "uSd", "btc", " zzz ")) {
-            integration().track(track("Order Completed", new ValueMap().putValue("currency", currency)));
+            integration().track(track("Order Completed", validOrderProperties().putValue("currency", currency)));
             capturePurchase(
                     "Order Completed", currency.trim().toUpperCase(Locale.ROOT), "0.0", 1);
         }
@@ -111,11 +111,11 @@ public class BrazeIntegrationTest {
     @Test
     public void explicitCurrencyFallbackIsNormalizedAndOnlyUsedWhenNeeded() {
         options.defaultCurrency(" gbp\n");
-        integration().track(track("Order Completed", new ValueMap().putValue("currency", "US1")));
+        integration().track(track("Order Completed", validOrderProperties().putValue("currency", "US1")));
         capturePurchase("Order Completed", "GBP", "0.0", 1);
-        integration().track(track("Completed Order", new ValueMap().putValue("currency", "eur")));
+        integration().track(track("Completed Order", validOrderProperties().putValue("currency", "eur")));
         capturePurchase("Completed Order", "EUR", "0.0", 1);
-        integration().track(track("Order Completed", new ValueMap()));
+        integration().track(track("Order Completed", validOrderProperties()));
         verify(braze, times(2)).logPurchase(eq("Order Completed"), eq("GBP"), any(), eq(1), any());
     }
 
@@ -155,12 +155,12 @@ public class BrazeIntegrationTest {
             TrackPayload event =
                     track(
                             "Order Completed",
-                            new ValueMap()
+                            validOrderProperties()
                                     .putValue("currency", "USD")
                                     .putValue(
                                             "products",
                                             Collections.singletonList(
-                                                    new ValueMap().putValue("sku", "SKU1"))));
+                                                    validProduct().putValue("sku", "SKU1"))));
             integration().track(event);
             verify(braze).logPurchase(anyString(), eq("ZZZ"), any(), eq(1), any());
             options.purchaseTransformer((purchase, context) -> purchase.withCurrency("US1"));
@@ -170,6 +170,81 @@ public class BrazeIntegrationTest {
                     .error(any(IllegalArgumentException.class), anyString(), eq("Order Completed"));
             verify(braze, times(1)).logPurchase(anyString(), anyString(), any(), anyInt(), any());
         }
+    }
+
+    @Test
+    public void priceIsRequiredAndSuppliedQuantityIsValidatedInBothGroupingModes() {
+        for (PurchaseGrouping grouping : Arrays.asList(
+                PurchaseGrouping.perOrder(), PurchaseGrouping.perProduct(ProductIdentifier.SKU))) {
+            options.purchaseGrouping(grouping);
+            for (boolean quantity : Arrays.asList(false, true)) {
+                List<Object> invalid = new ArrayList<>(Arrays.asList(
+                        null, true, "", " ", "12oops", "NaN", Double.NaN,
+                        Double.POSITIVE_INFINITY, "1e309", "0x10", new ValueMap()));
+                if (quantity) invalid.addAll(Arrays.asList(0, -1, 1.5, 101));
+                for (Object value : invalid) {
+                    ValueMap product = new ValueMap().putValue("sku", "SKU1")
+                            .putValue("price", 2).putValue("quantity", 1)
+                            .putValue(quantity ? "quantity" : "price", value);
+                    ValueMap order = new ValueMap().putValue("currency", "USD")
+                            .putValue("revenue", 2).putValue("quantity", 1)
+                            .putValue("products", Collections.singletonList(product))
+                            .putValue(quantity ? "quantity" : "revenue", value);
+                    if (!quantity) order.putValue("total", 99);
+                    Logger logger = mock(Logger.class);
+                    new BrazeIntegration(braze, options, preferences, logger)
+                            .track(track("Order Completed", order));
+                    verify(logger).error(any(IllegalArgumentException.class), anyString(), eq("Order Completed"));
+                }
+            }
+        }
+        verifyNoInteractions(braze);
+    }
+
+    @Test
+    public void omittedQuantityDefaultsToOneInBothGroupingModes() {
+        for (PurchaseGrouping grouping : Arrays.asList(
+                PurchaseGrouping.perOrder(), PurchaseGrouping.perProduct(ProductIdentifier.SKU))) {
+            options.purchaseGrouping(grouping).purchaseTransformer((purchase, context) -> {
+                assertThat(purchase.quantity()).isEqualTo(1);
+                return purchase;
+            });
+            for (boolean withProducts : Arrays.asList(false, true)) {
+                clearInvocations(braze);
+                ValueMap order = new ValueMap().putValue("currency", "USD").putValue("revenue", 2);
+                if (withProducts) {
+                    order.putValue("products", Collections.singletonList(
+                            new ValueMap().putValue("sku", "SKU1").putValue("price", 2)));
+                }
+                integration().track(track("Order Completed", order));
+                verify(braze).logPurchase(anyString(), eq("USD"), eq(new BigDecimal("2.0")), eq(1), any());
+            }
+        }
+    }
+
+    @Test
+    public void explicitZeroAndNumericStringsAreAccepted() {
+        integration().track(track("Order Completed", new ValueMap().putValue("currency", "USD")
+                .putValue("revenue", 0).putValue("total", 99).putValue("quantity", "2")));
+        capturePurchase("Order Completed", "USD", "0.0", 2);
+        integration().track(track("Order Completed", new ValueMap().putValue("currency", "USD")
+                .putValue("products", Collections.singletonList(new ValueMap().putValue("sku", "SKU1")
+                        .putValue("price", " 2.5e1 ").putValue("quantity", "3")))));
+        capturePurchase("SKU1", "USD", "25.0", 3);
+    }
+
+    @Test
+    public void transformedPurchaseNumbersAreValidated() {
+        for (boolean quantity : Arrays.asList(false, true)) {
+            options.purchaseTransformer((purchase, context) -> quantity
+                    ? purchase.withQuantity(0) : purchase.withPrice(null));
+            Logger logger = mock(Logger.class);
+            new BrazeIntegration(braze, options, preferences, logger)
+                    .track(track("Order Completed", new ValueMap().putValue("currency", "USD")
+                            .putValue("revenue", 2).putValue("quantity", 1)));
+            verify(logger).error(any(IllegalArgumentException.class), anyString(), eq("Order Completed"));
+        }
+        verifyNoInteractions(braze);
     }
 
     private BrazeIntegration integration() {
@@ -437,7 +512,7 @@ public class BrazeIntegrationTest {
         options.defaultCurrency("USD");
         List<ValueMap> products =
                 Arrays.asList(
-                        new ValueMap()
+                        validProduct()
                                 .putValue("product_id", "p1")
                                 .putValue("sku", "SKU-1")
                                 .putValue("name", "Towel")
@@ -449,14 +524,14 @@ public class BrazeIntegrationTest {
                                 .putValue("price", 12.5)
                                 .putValue("quantity", 2)
                                 .putValue("color", "blue"),
-                        new ValueMap().putValue("product_id", "p2").putValue("price", "3"),
-                        new ValueMap().putValue("name", "Mat"),
-                        new ValueMap().putValue("price", 1));
+                        validProduct().putValue("product_id", "p2").putValue("price", "3"),
+                        validProduct().putValue("name", "Mat"),
+                        validProduct().putValue("price", 1));
         integration()
                 .track(
                         track(
                                 "Order Completed",
-                                new ValueMap()
+                                validOrderProperties()
                                         .putValue("order_id", "o-1")
                                         .putValue("revenue", 28)
                                         .putValue("currency", "EUR")
@@ -496,12 +571,12 @@ public class BrazeIntegrationTest {
                 .track(
                         track(
                                 "Completed Order",
-                                new ValueMap()
+                                validOrderProperties()
                                         .putValue("currency", "dollars")
                                         .putValue(
                                                 "products",
                                                 Collections.singletonList(
-                                                        new ValueMap()
+                                                        validProduct()
                                                                 .putValue("sku", "SKU-1")
                                                                 .putValue("name", "Towel")))));
 
@@ -515,7 +590,7 @@ public class BrazeIntegrationTest {
                 .track(
                         track(
                                 "Order Completed",
-                                new ValueMap()
+                                new ValueMap().putValue("quantity", 1)
                                         .putValue("order_id", "o-1")
                                         .putValue("total", 20)
                                         .putValue("products", Collections.emptyList())));
@@ -533,18 +608,18 @@ public class BrazeIntegrationTest {
                 .track(
                         track(
                                 "Order Completed",
-                                new ValueMap()
+                                validOrderProperties()
                                         .putValue("order_id", "o-1")
                                         .putValue("revenue", 25)
                                         .putValue(
                                                 "products",
                                                 Arrays.asList(
-                                                        new ValueMap()
+                                                        validProduct()
                                                                 .putValue("sku", "SKU-1")
                                                                 .putValue("coupon", "SAVE")
                                                                 .putValue("price", 10)
                                                                 .putValue("quantity", 2),
-                                                        new ValueMap()
+                                                        validProduct()
                                                                 .putValue("sku", "SKU-2")
                                                                 .putValue("price", 5)))));
 
@@ -566,10 +641,10 @@ public class BrazeIntegrationTest {
     @Test
     public void defaultPurchaseEventNames() {
         options.defaultCurrency("USD");
-        integration().track(track("Order Completed", new ValueMap().putValue("total", 5)));
-        integration().track(track("Completed Order", new ValueMap().putValue("total", 5)));
-        integration().track(track("order completed", new ValueMap().putValue("total", 5)));
-        integration().track(track("Upgraded", new ValueMap().putValue("revenue", 9.99)));
+        integration().track(track("Order Completed", new ValueMap().putValue("quantity", 1).putValue("total", 5)));
+        integration().track(track("Completed Order", new ValueMap().putValue("quantity", 1).putValue("total", 5)));
+        integration().track(track("order completed", new ValueMap().putValue("quantity", 1).putValue("total", 5)));
+        integration().track(track("Upgraded", validOrderProperties().putValue("revenue", 9.99)));
 
         capturePurchase("Order Completed", "USD", "5.0", 1);
         capturePurchase("Completed Order", "USD", "5.0", 1);
@@ -581,8 +656,8 @@ public class BrazeIntegrationTest {
     public void customPurchaseEventNames() {
         options.defaultCurrency("USD");
         options.purchaseDetection(PurchaseDetection.eventNames("Membership Purchased"));
-        integration().track(track("Membership Purchased", new ValueMap().putValue("total", 5)));
-        integration().track(track("Order Completed", new ValueMap().putValue("total", 5)));
+        integration().track(track("Membership Purchased", new ValueMap().putValue("quantity", 1).putValue("total", 5)));
+        integration().track(track("Order Completed", new ValueMap().putValue("quantity", 1).putValue("total", 5)));
 
         capturePurchase("Membership Purchased", "USD", "5.0", 1);
         verify(braze).logCustomEvent(eq("Order Completed"), any());
@@ -593,8 +668,8 @@ public class BrazeIntegrationTest {
         options.defaultCurrency("USD");
         options.purchaseDetection(
                 PurchaseDetection.matcher(track -> "Upgraded".equals(track.event())));
-        integration().track(track("Upgraded", new ValueMap().putValue("total", 5)));
-        integration().track(track("Order Completed", new ValueMap().putValue("revenue", 5)));
+        integration().track(track("Upgraded", new ValueMap().putValue("quantity", 1).putValue("total", 5)));
+        integration().track(track("Order Completed", validOrderProperties().putValue("revenue", 5)));
 
         capturePurchase("Upgraded", "USD", "5.0", 1);
         verify(braze).logCustomEvent(eq("Order Completed"), any());
@@ -619,12 +694,21 @@ public class BrazeIntegrationTest {
                 .logPurchase(anyString(), anyString(), any(), anyInt(), any(BrazeProperties.class));
     }
 
+    private static ValueMap validOrderProperties() {
+        return new ValueMap().putValue("revenue", 0).putValue("quantity", 1);
+    }
+
+    private static ValueMap validProduct() {
+        return new ValueMap().putValue("price", 0).putValue("quantity", 1);
+    }
+
     private static TrackPayload order(ValueMap... products) {
         return track(
                 "Order Completed",
                 new ValueMap()
                         .putValue("order_id", "o-1")
                         .putValue("revenue", 25)
+                        .putValue("quantity", 1)
                         .putValue("products", Arrays.asList(products)));
     }
 
@@ -643,7 +727,7 @@ public class BrazeIntegrationTest {
                                     Collections.singletonMap(
                                             "Transaction Id", context.order().get("order_id")));
                 });
-        TrackPayload track = order(new ValueMap().putValue("sku", "SKU-1").putValue("price", 10));
+        TrackPayload track = order(validProduct().putValue("sku", "SKU-1").putValue("price", 10));
         integration().track(track);
 
         JSONObject properties = capturePurchase("X-SKU-1", "EUR", "9.5", 3);
@@ -676,9 +760,9 @@ public class BrazeIntegrationTest {
         integration()
                 .track(
                         order(
-                                new ValueMap().putValue("sku", "SKU-1"),
-                                new ValueMap().putValue("sku", "SKU-2"),
-                                new ValueMap().putValue("sku", "SKU-3")));
+                                validProduct().putValue("sku", "SKU-1"),
+                                validProduct().putValue("sku", "SKU-2"),
+                                validProduct().putValue("sku", "SKU-3")));
 
         capturePurchase("SKU-3", "USD", "0.0", 1);
         verify(braze, times(1))
@@ -694,7 +778,7 @@ public class BrazeIntegrationTest {
                                 ? purchase.withProductId(
                                         String.valueOf(context.product().get("id")))
                                 : purchase);
-        integration().track(order(new ValueMap().putValue("id", "legacy-1")));
+        integration().track(order(validProduct().putValue("id", "legacy-1")));
 
         capturePurchase("legacy-1", "USD", "0.0", 1);
     }
@@ -709,7 +793,7 @@ public class BrazeIntegrationTest {
                 });
         Logger logger = mock(Logger.class);
         new BrazeIntegration(braze, options, preferences, logger)
-                .track(order(new ValueMap().putValue("sku", "SKU-1").putValue("price", 10)));
+                .track(order(validProduct().putValue("sku", "SKU-1").putValue("price", 10)));
 
         verify(logger).error(eq(error), anyString(), any());
         assertThat(capturePurchase("SKU-1", "USD", "10.0", 1).getString("order_id"))

@@ -2,7 +2,14 @@ package com.hightouch.analytics.braze;
 
 import androidx.annotation.NonNull;
 
-/** Whether a purchase event logs one Braze purchase per product or one per order. */
+/**
+ * Whether a purchase event logs one Braze purchase per product or one per order.
+ * Products require a finite price. Omitted quantities default to 1; supplied quantities
+ * must be integers from 1 to 100. Whole-order purchases (including events without products)
+ * require revenue (or total if revenue is absent); quantity also defaults to 1.
+ * Complete numeric strings are accepted. Missing prices and invalid values are rejected
+ * and logged, including after the purchase transformer; an explicit zero price is valid.
+ */
 public abstract class PurchaseGrouping {
     private PurchaseGrouping() {}
 

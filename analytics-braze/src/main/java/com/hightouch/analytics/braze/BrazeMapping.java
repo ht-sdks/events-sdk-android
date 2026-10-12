@@ -305,13 +305,19 @@ final class BrazeMapping {
         if (!(purchaseGrouping instanceof PurchaseGrouping.PerProduct) || products.isEmpty()) {
             BigDecimal total =
                     BigDecimal.valueOf(
-                            number(
+                            purchaseNumber(
                                     properties.containsKey("revenue")
                                             ? properties.get("revenue")
                                             : properties.get("total"),
-                                    0));
+                                    false));
             logPurchase(
-                    new BrazePurchase(track.event(), total, currency, 1, properties),
+                    new BrazePurchase(
+                            track.event(),
+                            total,
+                            currency,
+                            (int) purchaseNumber(
+                                    properties.containsKey("quantity") ? properties.get("quantity") : 1, true),
+                            properties),
                     new PurchaseContext(track, properties, null));
             return;
         }
@@ -327,9 +333,10 @@ final class BrazeMapping {
             logPurchase(
                     new BrazePurchase(
                             productId(product, identifier),
-                            BigDecimal.valueOf(number(product.get("price"), 0)),
+                            BigDecimal.valueOf(purchaseNumber(product.get("price"), false)),
                             currency,
-                            (int) number(product.get("quantity"), 1),
+                            (int) purchaseNumber(
+                                    product.containsKey("quantity") ? product.get("quantity") : 1, true),
                             purchase),
                     new PurchaseContext(track, properties, product));
         }
@@ -353,6 +360,8 @@ final class BrazeMapping {
             logger.info("Dropping purchase without a product ID from %s.", context.event().event());
             return;
         }
+        purchaseNumber(purchase.price(), false);
+        purchaseNumber(purchase.quantity(), true);
         braze.logPurchase(
                 purchase.productId(),
                 purchaseCurrency(purchase.currency()),
@@ -539,17 +548,26 @@ final class BrazeMapping {
         };
     }
 
-    private static double number(Object value, double defaultValue) {
+    private static double purchaseNumber(Object value, boolean quantity) {
+        double number = Double.NaN;
         if (value instanceof Number) {
-            return ((Number) value).doubleValue();
-        }
-        if (value instanceof String) {
-            try {
-                return Double.parseDouble((String) value);
-            } catch (NumberFormatException ignored) {
+            number = ((Number) value).doubleValue();
+        } else if (value instanceof String) {
+            String text = ((String) value).trim();
+            if (text.matches("[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?")) {
+                try {
+                    number = Double.parseDouble(text);
+                } catch (NumberFormatException ignored) {
+                }
             }
         }
-        return defaultValue;
+        if (Double.isNaN(number) || Double.isInfinite(number)
+                || (quantity && (Math.rint(number) != number || number < 1 || number > 100))) {
+            throw new IllegalArgumentException("Braze purchase rejected: "
+                    + (quantity ? "quantity must be an integer from 1 to 100."
+                                : "price must be explicitly supplied as a finite number."));
+        }
+        return number;
     }
 
 }
