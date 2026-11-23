@@ -86,6 +86,18 @@ class SegmentIntegrationTest {
     val folder = TemporaryFolder()
     private lateinit var queueFile: QueueFile
 
+    @Test
+    fun customTagQueuesAreIsolatedByWriteKey() {
+        val app = org.robolectric.RuntimeEnvironment.application
+        val logger = with(Analytics.LogLevel.NONE)
+        val legacy = app.getDir("segment-disk-queue", Context.MODE_PRIVATE)
+        assertThat(SegmentIntegration.queueDirectory(app, "first", "first", logger)).isEqualTo(legacy)
+        val first = SegmentIntegration.queueDirectory(app, "first", "shared", logger)
+        val second = SegmentIntegration.queueDirectory(app, "second", "shared", logger)
+        assertThat(first).isNotEqualTo(legacy)
+        assertThat(first).isNotEqualTo(second)
+    }
+
     private fun mockConnection(): Client.Connection {
         return mockConnection(mock(HttpURLConnection::class.java))
     }

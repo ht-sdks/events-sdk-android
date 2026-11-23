@@ -171,6 +171,16 @@ class SegmentIntegration extends Integration<Void> {
         }
     }
 
+    static File queueDirectory(Context context, String writeKey, String tag, Logger logger) {
+        File legacy = context.getDir("segment-disk-queue", Context.MODE_PRIVATE);
+        if (tag.equals(writeKey)) return legacy;
+        if (new File(legacy, tag).exists()) {
+            logger.info("Leaving legacy custom-tag queue in place because its source is unknown.");
+        }
+        return new File(context.getDir("hightouch-source-queues", Context.MODE_PRIVATE),
+                java.util.UUID.nameUUIDFromBytes(writeKey.getBytes(UTF_8)).toString());
+    }
+
     static synchronized SegmentIntegration create(
             Context context,
             Client client,
@@ -186,8 +196,7 @@ class SegmentIntegration extends Integration<Void> {
             ValueMap settings) {
         PayloadQueue payloadQueue;
         try {
-            File folder = context.getDir("segment-disk-queue", Context.MODE_PRIVATE);
-            QueueFile queueFile = createQueueFile(folder, tag);
+            QueueFile queueFile = createQueueFile(queueDirectory(context, client.writeKey, tag, logger), tag);
             payloadQueue = new PayloadQueue.PersistentQueue(queueFile);
         } catch (IOException e) {
             logger.error(e, "Could not create disk queue. Falling back to memory queue.");
