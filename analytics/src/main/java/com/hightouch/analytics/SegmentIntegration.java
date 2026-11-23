@@ -63,6 +63,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Entity that queues payloads on disks and uploads them periodically. */
 class SegmentIntegration extends Integration<Void> {
@@ -123,7 +124,8 @@ class SegmentIntegration extends Integration<Void> {
     private final ExecutorService networkExecutor;
     private final ScheduledExecutorService flushScheduler;
     private final String apiHost;
-    private long nextProbeAtMillis;
+    private final AtomicBoolean flushSubmitted = new AtomicBoolean();
+    private volatile long nextProbeAtMillis;
     private long probeDelayMillis = 1000;
     /**
      * We don't want to stop adding payloads to our disk queue when we're uploading payloads. So we
@@ -364,15 +366,33 @@ class SegmentIntegration extends Integration<Void> {
             return;
         }
 
-        networkExecutor.submit(
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        synchronized (flushLock) {
-                            performFlush();
+        if (android.os.SystemClock.elapsedRealtime() < nextProbeAtMillis
+                || !flushSubmitted.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            networkExecutor.submit(
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                synchronized (flushLock) {
+                                    performFlush();
+                                }
+                            } finally {
+                                flushSubmitted.set(false);
+                            }
                         }
-                    }
-                });
+                    });
+        } catch (RuntimeException e) {
+            flushSubmitted.set(false);
+            throw e;
+        }
+    }
+
+    private void deferProbe() {
+        nextProbeAtMillis = android.os.SystemClock.elapsedRealtime() + probeDelayMillis;
+        probeDelayMillis = Math.min(60000, probeDelayMillis * 2);
     }
 
     private boolean shouldFlush() {
@@ -406,11 +426,11 @@ class SegmentIntegration extends Integration<Void> {
 
             // Upload the payloads.
             connection.close();
+            nextProbeAtMillis = 0;
             probeDelayMillis = 1000;
         } catch (Client.HTTPException e) {
             if (e.responseCode == 401 || e.responseCode == 403 || e.responseCode == 404) {
-                nextProbeAtMillis = android.os.SystemClock.elapsedRealtime() + probeDelayMillis;
-                probeDelayMillis = Math.min(60000, probeDelayMillis * 2);
+                deferProbe();
                 logger.error(e, "Check the write key and endpoint. Keeping queued events for retry.");
                 return;
             }
@@ -425,10 +445,12 @@ class SegmentIntegration extends Integration<Void> {
                 }
                 return;
             } else {
+                if (nextProbeAtMillis != 0) deferProbe();
                 logger.error(e, "Error while uploading payloads");
                 return;
             }
         } catch (IOException e) {
+            if (nextProbeAtMillis != 0) deferProbe();
             logger.error(e, "Error while uploading payloads");
             return;
         } finally {
