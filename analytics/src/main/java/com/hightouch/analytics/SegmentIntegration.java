@@ -123,6 +123,8 @@ class SegmentIntegration extends Integration<Void> {
     private final ExecutorService networkExecutor;
     private final ScheduledExecutorService flushScheduler;
     private final String apiHost;
+    private long nextProbeAtMillis;
+    private long probeDelayMillis = 1000;
     /**
      * We don't want to stop adding payloads to our disk queue when we're uploading payloads. So we
      * upload payloads on a network executor instead.
@@ -371,7 +373,7 @@ class SegmentIntegration extends Integration<Void> {
     /** Upload payloads to our servers and remove them from the queue file. */
     void performFlush() {
         // Conditions could have changed between enqueuing the task and when it is run.
-        if (!shouldFlush()) {
+        if (!shouldFlush() || android.os.SystemClock.elapsedRealtime() < nextProbeAtMillis) {
             return;
         }
 
@@ -395,8 +397,15 @@ class SegmentIntegration extends Integration<Void> {
 
             // Upload the payloads.
             connection.close();
+            probeDelayMillis = 1000;
         } catch (Client.HTTPException e) {
-            if (e.is4xx() && e.responseCode != 429) {
+            if (e.responseCode == 401 || e.responseCode == 403 || e.responseCode == 404) {
+                nextProbeAtMillis = android.os.SystemClock.elapsedRealtime() + probeDelayMillis;
+                probeDelayMillis = Math.min(60000, probeDelayMillis * 2);
+                logger.error(e, "Check the write key and endpoint. Keeping queued events for retry.");
+                return;
+            }
+            if (e.is4xx() && e.responseCode != 408 && e.responseCode != 429) {
                 // Simply log and proceed to remove the rejected payloads from the queue.
                 logger.error(e, "Payloads were rejected by server. Marked for removal.");
                 try {

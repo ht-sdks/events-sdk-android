@@ -401,7 +401,15 @@ class SegmentIntegrationTest {
 
     @Test
     @Throws(IOException::class)
-    fun ignoresHTTP429Error() {
+    fun retainsBatchAfterRateLimit() = retainsBatchAfterHttpError(429)
+
+    @Test
+    fun retainsBatchAfterRequestTimeout() = retainsBatchAfterHttpError(408)
+
+    @Test
+    fun retainsBatchAfterInvalidCredentials() = retainsBatchAfterHttpError(401)
+
+    private fun retainsBatchAfterHttpError(status: Int) {
         // todo: rewrite using mockwebserver.
         val payloadQueue: PayloadQueue = PersistentQueue(queueFile)
         val client = mock(Client::class.java)
@@ -416,7 +424,7 @@ class SegmentIntegrationTest {
                 ) {
                     @Throws(IOException::class)
                     override fun close() {
-                        throw Client.HTTPException(429, "Too Many Requests", "too many requests")
+                        throw Client.HTTPException(status, "Retry later", "")
                     }
                 })
         val segmentIntegration = SegmentBuilder()
@@ -428,7 +436,6 @@ class SegmentIntegrationTest {
         }
         segmentIntegration.submitFlush()
 
-        // Verify that messages were not removed from the queue when server returned a 429.
         assertThat(queueFile.size()).isEqualTo(4)
         verify(client).upload(DEFAULT_API_HOST)
     }
