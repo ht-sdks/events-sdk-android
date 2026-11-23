@@ -71,7 +71,7 @@ class SegmentIntegration extends Integration<Void> {
             new Integration.Factory() {
                 @Override
                 public Integration<?> create(ValueMap settings, Analytics analytics) {
-                    return SegmentIntegration.create(
+                    SegmentIntegration integration = SegmentIntegration.create(
                             analytics.getApplication(),
                             analytics.client,
                             analytics.cartographer,
@@ -84,6 +84,8 @@ class SegmentIntegration extends Integration<Void> {
                             analytics.getLogger(),
                             analytics.crypto,
                             settings);
+                    integration.startupQueue = analytics.startupQueue;
+                    return integration;
                 }
 
                 @Override
@@ -147,6 +149,7 @@ class SegmentIntegration extends Integration<Void> {
     @Private final Object flushLock = new Object();
 
     private final Crypto crypto;
+    private StartupQueue startupQueue;
 
     /**
      * Create a {@link QueueFile} in the given folder with the given name. If the underlying file is
@@ -276,6 +279,7 @@ class SegmentIntegration extends Integration<Void> {
     }
 
     private void dispatchEnqueue(BasePayload payload) {
+        if (startupQueue != null) startupQueue.claim(payload.messageId());
         handler.sendMessage(
                 handler.obtainMessage(SegmentDispatcherHandler.REQUEST_ENQUEUE, payload));
     }
@@ -323,6 +327,7 @@ class SegmentIntegration extends Integration<Void> {
                 throw new IOException("Could not serialize payload " + payload);
             }
             payloadQueue.add(bytes);
+            if (startupQueue != null) startupQueue.acknowledge(original.messageId());
         } catch (IOException e) {
             logger.error(e, "Could not add payload %s to queue: %s.", payload, payloadQueue);
             return;

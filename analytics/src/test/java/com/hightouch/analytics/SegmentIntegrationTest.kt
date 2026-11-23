@@ -86,6 +86,23 @@ class SegmentIntegrationTest {
     val folder = TemporaryFolder()
     private lateinit var queueFile: QueueFile
 
+    @Test
+    fun startupEventSurvivesRecreationUntilTheUploadQueueAcceptsIt() {
+        val prefs = org.robolectric.RuntimeEnvironment.application.getSharedPreferences("startup-test", Context.MODE_PRIVATE)
+        fun queue() = StartupQueue(prefs, Cartographer.INSTANCE, Crypto.none(), with(Analytics.LogLevel.NONE))
+        queue().add(TRACK_PAYLOAD)
+        val restored = queue()
+        val event = restored.restore().single()
+        assertThat(event.messageId()).isEqualTo(TRACK_PAYLOAD.messageId())
+        assertThat(event.timestamp()).isEqualTo(TRACK_PAYLOAD.timestamp())
+        assertThat(event.anonymousId()).isEqualTo(TRACK_PAYLOAD.anonymousId())
+        restored.claim(event.messageId())
+        restored.finishDispatch(event.messageId())
+        assertThat(queue().restore()).hasSize(1)
+        restored.acknowledge(event.messageId())
+        assertThat(queue().restore()).isEmpty()
+    }
+
     private fun mockConnection(): Client.Connection {
         return mockConnection(mock(HttpURLConnection::class.java))
     }

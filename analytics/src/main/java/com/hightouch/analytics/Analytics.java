@@ -285,13 +285,16 @@ public class Analytics {
         this.useNewLifecycleMethods = useNewLifecycleMethods;
         this.sessionPlugin = sessionPlugin;
 
+        String source = java.util.UUID.nameUUIDFromBytes(writeKey.getBytes(SegmentIntegration.UTF_8)).toString();
+        startupQueue = new StartupQueue(application.getSharedPreferences("hightouch-startup-" + tag + "-" + source,
+                Context.MODE_PRIVATE), cartographer, crypto, logger);
         namespaceSharedPreferences();
 
         analyticsExecutor.submit(
                 new Runnable() {
                     @Override
                     public void run() {
-                        projectSettings = getSettings();
+                        projectSettings = projectSettingsCache.get();
                         if (Utils.isNullOrEmpty(projectSettings)) {
                             // Backup mode - Enable the Segment integration and load the provided
                             // defaultProjectSettings
@@ -343,7 +346,7 @@ public class Analytics {
                                     .getValueMap("Segment.io")
                                     .putValue("apiHost", defaultApiHost);
                         }
-                        HANDLER.post(
+                        Analytics.this.run(
                                 new Runnable() {
                                     @Override
                                     public void run() {
@@ -499,7 +502,7 @@ public class Analytics {
             throw new IllegalArgumentException("Either userId or some traits must be provided.");
         }
         Date timestamp = this.nanosecondTimestamps ? new NanoDate() : new Date();
-        analyticsExecutor.submit(
+        submitEvent(
                 new Runnable() {
                     @Override
                     public void run() {
@@ -556,7 +559,7 @@ public class Analytics {
             throw new IllegalArgumentException("groupId must not be null or empty.");
         }
         Date timestamp = this.nanosecondTimestamps ? new NanoDate() : new Date();
-        analyticsExecutor.submit(
+        submitEvent(
                 new Runnable() {
                     @Override
                     public void run() {
@@ -608,7 +611,7 @@ public class Analytics {
             throw new IllegalArgumentException("event must not be null or empty.");
         }
         Date timestamp = this.nanosecondTimestamps ? new NanoDate() : new Date();
-        analyticsExecutor.submit(
+        submitEvent(
                 new Runnable() {
                     @Override
                     public void run() {
@@ -678,7 +681,7 @@ public class Analytics {
             throw new IllegalArgumentException("either category or name must be provided.");
         }
         Date timestamp = this.nanosecondTimestamps ? new NanoDate() : new Date();
-        analyticsExecutor.submit(
+        submitEvent(
                 new Runnable() {
                     @Override
                     public void run() {
@@ -733,7 +736,7 @@ public class Analytics {
         }
 
         Date timestamp = this.nanosecondTimestamps ? new NanoDate() : new Date();
-        analyticsExecutor.submit(
+        submitEvent(
                 new Runnable() {
                     @Override
                     public void run() {
@@ -745,6 +748,14 @@ public class Analytics {
                         fillAndEnqueue(builder, options);
                     }
                 });
+    }
+
+    private volatile boolean integrationsReady;
+    final StartupQueue startupQueue;
+
+    private synchronized void submitEvent(Runnable task) {
+        if (integrationsReady) analyticsExecutor.submit(task);
+        else task.run();
     }
 
     private void waitForAdvertisingId() {
@@ -761,7 +772,7 @@ public class Analytics {
 
     @Private
     void fillAndEnqueue(BasePayload.Builder<?, ?> builder, Options options) {
-        waitForAdvertisingId();
+        if (integrationsReady) waitForAdvertisingId();
 
         // TODO (major version change) -> do not override, merge it with defaultOptions
         final Options finalOptions;
@@ -812,7 +823,11 @@ public class Analytics {
         chain.proceed(payload);
     }
 
-    void run(BasePayload payload) {
+    synchronized void run(final BasePayload payload) {
+        if (!integrationsReady) {
+            if (!optOut.get()) startupQueue.add(payload);
+            return;
+        }
         logger.verbose("Running payload %s.", payload);
         final IntegrationOperation operation =
                 IntegrationOperation.segmentEvent(payload, destinationMiddleware);
@@ -821,6 +836,7 @@ public class Analytics {
                     @Override
                     public void run() {
                         performRun(operation);
+                        startupQueue.finishDispatch(payload.messageId());
                     }
                 });
     }
@@ -1711,6 +1727,18 @@ public class Analytics {
             }
         }
         factories = null;
+        synchronized (this) {
+            final List<BasePayload> pending = startupQueue.restore();
+            integrationsReady = true;
+            analyticsExecutor.submit(new Runnable() {
+                @Override public void run() {
+                    for (BasePayload event : pending) {
+                        if (optOut.get()) startupQueue.acknowledge(event.messageId());
+                        else Analytics.this.run(event);
+                    }
+                }
+            });
+        }
     }
 
     /** Runs the given operation on all integrations. */
