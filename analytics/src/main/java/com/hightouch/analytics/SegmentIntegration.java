@@ -194,7 +194,8 @@ class SegmentIntegration extends Integration<Void> {
             ValueMap settings) {
         PayloadQueue payloadQueue;
         try {
-            QueueFile queueFile = createQueueFile(queueDirectory(context, client.writeKey, tag, logger), tag);
+            File folder = queueDirectory(context, client.writeKey, tag, logger);
+            QueueFile queueFile = createQueueFile(folder, tag);
             payloadQueue = new PayloadQueue.PersistentQueue(queueFile);
         } catch (IOException e) {
             logger.error(e, "Could not create disk queue. Falling back to memory queue.");
