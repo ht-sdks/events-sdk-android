@@ -87,15 +87,22 @@ class SegmentIntegrationTest {
     private lateinit var queueFile: QueueFile
 
     @Test
-    fun customTagQueuesAreIsolatedByWriteKey() {
+    fun reopensExistingCustomTagQueue() {
         val app = org.robolectric.RuntimeEnvironment.application
-        val logger = with(Analytics.LogLevel.NONE)
-        val legacy = app.getDir("segment-disk-queue", Context.MODE_PRIVATE)
-        assertThat(SegmentIntegration.queueDirectory(app, "first", "first", logger)).isEqualTo(legacy)
-        val first = SegmentIntegration.queueDirectory(app, "first", "shared", logger)
-        val second = SegmentIntegration.queueDirectory(app, "second", "shared", logger)
-        assertThat(first).isNotEqualTo(legacy)
-        assertThat(first).isNotEqualTo(second)
+        val file = File(app.getDir("segment-disk-queue", Context.MODE_PRIVATE), "custom-tag")
+        QueueFile(file).use { it.add(TRACK_PAYLOAD_JSON.toByteArray()) }
+        val integration = SegmentIntegration.create(
+            app, Client("write-key", ConnectionFactory()), Cartographer.INSTANCE,
+            SynchronousExecutor(), mock(Stats::class.java), emptyMap(), file.name,
+            DEFAULT_FLUSH_INTERVAL.toLong(), DEFAULT_FLUSH_QUEUE_SIZE,
+            with(Analytics.LogLevel.NONE), Crypto.none(), ValueMap()
+        )
+        try {
+            integration.performEnqueue(TRACK_PAYLOAD)
+        } finally {
+            integration.shutdown()
+        }
+        QueueFile(file).use { assertThat(it.size()).isEqualTo(2) }
     }
 
     private fun mockConnection(): Client.Connection {
