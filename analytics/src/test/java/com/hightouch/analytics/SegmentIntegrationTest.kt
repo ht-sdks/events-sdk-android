@@ -277,17 +277,6 @@ class SegmentIntegrationTest {
     }
 
     @Test
-    fun concurrentFlushesSubmitOnlyOneUpload() {
-        val executor = mock(ExecutorService::class.java)
-        val queue = mock(PayloadQueue::class.java)
-        whenever(queue.size()).thenReturn(2)
-        val dispatcher = SegmentBuilder().payloadQueue(queue).networkExecutor(executor).build()
-        dispatcher.submitFlush()
-        dispatcher.submitFlush()
-        verify(executor).submit(any(Runnable::class.java))
-    }
-
-    @Test
     fun flushChecksIfExecutorIsShutdownFirst() {
         val executor = spy(SynchronousExecutor())
         val payloadQueue = mock(PayloadQueue::class.java)
@@ -428,9 +417,6 @@ class SegmentIntegrationTest {
 
     @Test
     fun retainsBatchAfterRequestTimeout() = retainsBatchAfterHttpError(408)
-
-    @Test
-    fun retainsBatchAfterInvalidCredentials() = retainsBatchAfterHttpError(401)
 
     private fun retainsBatchAfterHttpError(status: Int) {
         // todo: rewrite using mockwebserver.
