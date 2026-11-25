@@ -86,6 +86,25 @@ class SegmentIntegrationTest {
     val folder = TemporaryFolder()
     private lateinit var queueFile: QueueFile
 
+    @Test
+    fun reopensExistingCustomTagQueue() {
+        val app = org.robolectric.RuntimeEnvironment.application
+        val file = File(app.getDir("segment-disk-queue", Context.MODE_PRIVATE), "custom-tag")
+        QueueFile(file).use { it.add(TRACK_PAYLOAD_JSON.toByteArray()) }
+        val integration = SegmentIntegration.create(
+            app, Client("write-key", ConnectionFactory()), Cartographer.INSTANCE,
+            SynchronousExecutor(), mock(Stats::class.java), emptyMap(), file.name,
+            DEFAULT_FLUSH_INTERVAL.toLong(), DEFAULT_FLUSH_QUEUE_SIZE,
+            with(Analytics.LogLevel.NONE), Crypto.none(), ValueMap()
+        )
+        try {
+            integration.performEnqueue(TRACK_PAYLOAD)
+        } finally {
+            integration.shutdown()
+        }
+        QueueFile(file).use { assertThat(it.size()).isEqualTo(2) }
+    }
+
     private fun mockConnection(): Client.Connection {
         return mockConnection(mock(HttpURLConnection::class.java))
     }
@@ -401,7 +420,12 @@ class SegmentIntegrationTest {
 
     @Test
     @Throws(IOException::class)
-    fun ignoresHTTP429Error() {
+    fun retainsBatchAfterRateLimit() = retainsBatchAfterHttpError(429)
+
+    @Test
+    fun retainsBatchAfterRequestTimeout() = retainsBatchAfterHttpError(408)
+
+    private fun retainsBatchAfterHttpError(status: Int) {
         // todo: rewrite using mockwebserver.
         val payloadQueue: PayloadQueue = PersistentQueue(queueFile)
         val client = mock(Client::class.java)
@@ -416,7 +440,7 @@ class SegmentIntegrationTest {
                 ) {
                     @Throws(IOException::class)
                     override fun close() {
-                        throw Client.HTTPException(429, "Too Many Requests", "too many requests")
+                        throw Client.HTTPException(status, "Retry later", "")
                     }
                 })
         val segmentIntegration = SegmentBuilder()
@@ -428,7 +452,6 @@ class SegmentIntegrationTest {
         }
         segmentIntegration.submitFlush()
 
-        // Verify that messages were not removed from the queue when server returned a 429.
         assertThat(queueFile.size()).isEqualTo(4)
         verify(client).upload(DEFAULT_API_HOST)
     }
